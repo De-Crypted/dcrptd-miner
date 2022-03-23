@@ -13,8 +13,15 @@ Currently supports only Shifupool protocol (http://185.215.180.7:4001/) which is
 
 ## Compile standalone exe
 Windows
+
 `dotnet publish -c Release -p:PublishSingleFile=true --self-contained --runtime win-x64`
+
+
 Linux
+
 `dotnet publish -c Release -p:PublishSingleFile=true --self-contained --runtime linux-x64`
+
+
 Mac OSX
+
 `dotnet publish -c Release -p:PublishSingleFile=true --self-contained --runtime osx-x64`
