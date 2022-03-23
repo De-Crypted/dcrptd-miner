@@ -1,0 +1,27 @@
+{
+    "_url": "Pool url. Address prefix determines protocol used.",
+    "url": "shifu://185.215.180.7:5555",
+    "_user": "Wallet address",
+    "user": "WALLET_ADDRESS_HERE",
+    "gpu": {
+        "_enabled": "Enable or disable gpu miner",
+        "enabled": true,
+        "_device": "Select GPU by device id or name, set to null to auto detect.",
+        "device": null,
+        "_work_multiplier": "Specifies how much work to queue on gpu.",
+        "work_multiplier": 1024,
+        "_work_size": "Number of hashes per work thread. Larger should be better but there is greater delay until valid shares are submitted resulting in potential rejected shares",
+        "work_size": 1024
+    },
+    "cpu": {
+        "_enabled": "Enable or disable cpu miner",
+        "enabled": true,
+        "_threads": "Set amount of threads to run. -1 = auto detect thread count",
+        "threads": -1
+    },
+    "Logging": {
+        "Loglevel": {
+            "Default": "Warning"
+        }
+    }
+}
