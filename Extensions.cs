@@ -3,6 +3,8 @@ using System.Text;
 using System.Collections.Generic;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using System.Diagnostics;
+using OpenCL.NetCore;
 
 namespace dcrpt_miner 
 {
@@ -51,6 +53,14 @@ namespace dcrpt_miner
             }
 
             return bytes.ToArray();
+        }
+
+        public static void ThrowIfError(this ErrorCode errorCode) {
+            if (errorCode == ErrorCode.Success) {
+                return;
+            }
+            
+            throw new Exception(String.Format("OpenCL call returned error ({0})", errorCode));
         }
     }
 }

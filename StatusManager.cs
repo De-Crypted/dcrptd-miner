@@ -14,7 +14,8 @@ namespace dcrpt_miner
     {
         private static Stopwatch Watch { get; set; }
         private static SpinLock SpinLock = new SpinLock();
-        public static ulong[] HashCount;
+        public static ulong[] CpuHashCount = new ulong[0];
+        public static ulong[] GpuHashCount = new ulong[0];
         private static List<Snapshot> HashrateSnapshots = new List<Snapshot>();
 
         public IConfiguration Configuration { get; }
@@ -27,25 +28,8 @@ namespace dcrpt_miner
 
         public Task StartAsync(CancellationToken cancellationToken)
         {
-            var cpuEnabled = Configuration.GetValue<bool>("cpu:enabled");
-            var gpuEnabled = Configuration.GetValue<bool>("gpu:enabled");
-            var threads = 0;
-
-            if (cpuEnabled) {
-                threads = Configuration.GetValue<int>("cpu:threads");
-
-                if (threads <= 0) {
-                    threads = Environment.ProcessorCount;
-                }
-            }
-
-            if (gpuEnabled) {
-                threads++;
-            }
-
             Watch = new Stopwatch();
 
-            HashCount = new ulong[threads];
             new Thread(() => ReportProgress(ThreadSource.Token))
                 .UnsafeStart();
             new Thread(() => CollectHashrate(ThreadSource.Token))
@@ -119,35 +103,36 @@ namespace dcrpt_miner
                     HashrateSnapshots.RemoveAll(p => p.timestamp <= expiredAt);
 
                     if (cpuEnabled) {
-                        int start = gpuEnabled ? 1 : 0;
-                        for (int i = start; i < HashCount.Length; i++) {
-                            hashes += HashCount[i];
+                        for (int i = 0; i < CpuHashCount.Length; i++) {
+                            hashes += CpuHashCount[i];
                         }
 
                         HashrateSnapshots.Add(new Snapshot {
                             timestamp = DateTime.Now,
                             type = "CPU",
                             id = 0,
-                            hashrate = hashes * 100000
+                            hashrate = hashes
                         });
                     }
 
                     if (gpuEnabled) {
-                        HashrateSnapshots.Add(new Snapshot {
-                            timestamp = DateTime.Now,
-                            type = "GPU",
-                            id = 0,
-                            hashrate = HashCount[0] * 100000
-                        });
+                        for (int i = 0; i < GpuHashCount.Length; i++) {
+                            HashrateSnapshots.Add(new Snapshot {
+                                timestamp = DateTime.Now,
+                                type = "GPU",
+                                id = i,
+                                hashrate = GpuHashCount[i]
+                            });
 
-                        hashes += HashCount[0];
+                            hashes += GpuHashCount[i];
+                        }
                     }
 
                     HashrateSnapshots.Add(new Snapshot {
                         timestamp = DateTime.Now,
                         type = "TOTAL",
                         id = 0,
-                        hashrate = hashes * 100000
+                        hashrate = hashes
                     });
                 } catch (Exception ex) {
                     Console.WriteLine(ex.ToString());
@@ -162,7 +147,7 @@ namespace dcrpt_miner
             }
         }
 
-        private void ReportProgress(CancellationToken token)
+        private async void ReportProgress(CancellationToken token)
         {
             var gpuEnabled = Configuration.GetValue<bool>("gpu:enabled");
             var cpuEnabled = Configuration.GetValue<bool>("cpu:enabled");
@@ -185,12 +170,17 @@ namespace dcrpt_miner
                 }
 
                 if (gpuEnabled) {
-                    var gpuHashes = GetHashrate("GPU", 0, TimeSpan.FromMinutes(1));
-                    CalculateUnit(gpuHashes, out double gpu_hashrate, out string gpu_unit);
-                    Console.WriteLine("| Hashrate (GPU) \t{0:N2} {1}\t|", gpu_hashrate, gpu_unit);
+                    for (int i = 0; i < GpuHashCount.Length; i++) {
+                        var gpuHashes = GetHashrate("GPU", i, TimeSpan.FromMinutes(1));
+                        CalculateUnit(gpuHashes, out double gpu_hashrate, out string gpu_unit);
+                        Console.WriteLine("| Hashrate (GPU #{0}) \t{1:N2} {2}\t|",
+                            i,
+                            gpu_hashrate, 
+                            gpu_unit);
+                    }
                 }
 
-                if (cpuEnabled && gpuEnabled) {
+                if ((CpuHashCount.Length + GpuHashCount.Length) > 1) {
                     var totalHashes = GetHashrate("TOTAL", 0, TimeSpan.FromMinutes(1));
                     CalculateUnit(totalHashes, out double hashrate, out string unit);
                     Console.WriteLine("| Hashrate (Total) \t{0:N2} {1}\t|", hashrate, unit);

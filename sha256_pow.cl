@@ -177,23 +177,14 @@ bool inline checkLeadingZeroBits(char* hash, int challengeBytes, int remainingBi
     return true;
 }
 
-int inline checkLeadingZeroBitsEx(uchar* hash, int difficulty) {
-    uint zeros = hash[0] + hash[1] + hash[2] + hash[3];
-
-    return zeros == 0;
-}
-
 __kernel void sha256_pow_kernel(__global const char* concat,
-                                __global const int* difficulty,
                                 __global char* results,
-                                __global volatile uint* found) {
+                                __global volatile int* count) {
     uint gx = get_global_id(0);
+    uint yx = get_global_id(1);
 
-    // Prepare input buffer and convenience byte pointer to it.
-    //__uint128_t local_input[4];
-    //__uint128_t local_digest[2];
-    ulong local_input[8];
-    ulong local_digest[4];
+    uint local_input[16];
+    uint local_digest[8];
 
     char* local_input_bytes = (char*)local_input;
 
@@ -202,25 +193,23 @@ __kernel void sha256_pow_kernel(__global const char* concat,
       local_input_bytes[i] = concat[i];
     }
 
-    //ulong* increment = (ulong*)&local_input[2];
-    //*increment += gx * 1024;
-    local_input[6] += gx * 1024;
+    local_input[12] += gx;
+    local_input[14] += yx;
 
-    //int attempts_num;
     int diff;
     int challengeBytes;
     int remainingBits;
 
-    diff = *difficulty;
+    diff = concat[32];
     challengeBytes = diff / 8;
     remainingBits = (diff - (8 * challengeBytes));
 
-    for (int i = 0; i < WORK_SIZE; i++) { 
+    for(int i = 0; i < WORK_SIZE; i++) {
       sha256_crypt_subkernel((uint*)local_input, (uint*)local_digest);
       bool res = checkLeadingZeroBits((char*)local_digest, challengeBytes, remainingBits);
 
       if (res) {
-        int f = atomic_add((&found[0]), 1);
+        int f = atomic_inc(count);
 
         #pragma unroll
         for (int x = 0; x < POW_INPUT_SIZE; x++) {
@@ -228,6 +217,6 @@ __kernel void sha256_pow_kernel(__global const char* concat,
         }
       }
 
-      ++local_input[7];
+      ++local_input[15];
     }
 }

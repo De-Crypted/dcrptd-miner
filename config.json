@@ -8,10 +8,10 @@
         "enabled": true,
         "_device": "Select GPU by device id or name, set to null to auto detect.",
         "device": null,
-        "_work_multiplier": "Specifies how much work to queue on gpu.",
-        "work_multiplier": 1024,
+        "_work_multiplier": "Specifies how much work to queue on gpu. Set to null for auto detect",
+        "work_multiplier": null,
         "_work_size": "Number of hashes per work thread. Larger should be better but there is greater delay until valid shares are submitted resulting in potential rejected shares",
-        "work_size": 1024
+        "work_size": 512
     },
     "cpu": {
         "_enabled": "Enable or disable cpu miner",

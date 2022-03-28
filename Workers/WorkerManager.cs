@@ -20,7 +20,8 @@ namespace dcrpt_miner
         public Channels Channels { get; }
         public IConfiguration Configuration { get; }
         public ILogger<WorkerManager> Logger { get; }
-        private GpuWorker GpuWorker { get; }
+        public ILoggerFactory LoggerFactory { get; }
+
         private CancellationTokenSource ThreadSource = new CancellationTokenSource();
 
         public WorkerManager(Channels channels, IConfiguration configuration, ILogger<WorkerManager> logger, ILoggerFactory loggerFactory)
@@ -28,8 +29,7 @@ namespace dcrpt_miner
             Channels = channels ?? throw new ArgumentNullException(nameof(channels));
             Configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
             Logger = logger ?? throw new ArgumentNullException(nameof(logger));
-
-            GpuWorker = new GpuWorker(channels, configuration, loggerFactory);
+            LoggerFactory = loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory));
         }
 
         public Task StartAsync(CancellationToken cancellationToken) 
@@ -62,38 +62,55 @@ namespace dcrpt_miner
                 if (threads <= 0) {
                     threads = Environment.ProcessorCount;
                 }
+
+                StatusManager.CpuHashCount = new ulong[threads];
+
+                for (uint i = 0; i < threads; i++) {
+                    var queue = new BlockingCollection<Job>(1);
+
+                    var tid = i;
+                    Logger.LogDebug("Starting CpuWorker[{}] thread", tid);
+                    new Thread(() => CpuWorker.DoWork(tid, queue, Channels, ThreadSource.Token))
+                        .UnsafeStart();
+
+                    Workers.Add(queue);
+                }
             }
 
             if (gpuEnabled) {
-                GpuWorker.BuildOpenCL();
-            }
+                var gpuDevices = GpuWorker.QueryDevices(Configuration, LoggerFactory);
 
-            for (uint i = 0; i < threads; i++)
-            {
-                var id = i;
-                var queue = new BlockingCollection<Job>(1);
-
-                Thread thread = null;
-
-                if (id == 0 && gpuEnabled) {
-                    Logger.LogDebug("Starting GpuWorker thread");
-                    thread = new Thread(() => GpuWorker.DoWork(id, queue, ThreadSource.Token));
-                } else if (cpuEnabled) {
-                    Logger.LogDebug("Starting CpuWorker[{}] thread", i);
-                    thread = new Thread(() => CpuWorker.DoWork(id, queue, Channels, ThreadSource.Token));
+                var gpuConfig = Configuration.GetValue<string>("gpu:device");
+                if (string.IsNullOrEmpty(gpuConfig)) {
+                    gpuConfig = "0";
                 }
+                var selectedGpus = gpuConfig.Split(',');
 
-                if (thread != null) {
-                    thread.IsBackground = true;
-                    thread.UnsafeStart();
+                StatusManager.GpuHashCount = new ulong[selectedGpus.Length];
+
+                for (uint i = 0; i < selectedGpus.Length; i++) {
+                    var queue = new BlockingCollection<Job>(1);
+                    
+                    var byId = int.TryParse(selectedGpus[i], out var deviceId);
+                    var gpu = byId ? gpuDevices.Find(g => g.Id == deviceId) : gpuDevices.Find(g => g.DeviceName == selectedGpus[i]);
+
+                    if (gpu == null) {
+                        continue;
+                    }
+
+                    var tid = i;
+                    Logger.LogDebug("Starting GpuWorker[{}] thread for gpu id: {}, name: {}", tid, gpu.Id, gpu.DeviceName);
+                    new Thread(() => GpuWorker.DoWork(tid, gpu, queue, Channels, Configuration, LoggerFactory.CreateLogger<GpuWorker>(), ThreadSource.Token))
+                        .UnsafeStart();
+
+                    Workers.Add(queue);
                 }
-
-                Workers.Add(queue);
             }
 
             Logger.LogDebug("Waiting for job");
             await foreach(var job in Channels.Jobs.Reader.ReadAllAsync(ThreadSource.Token)) {
                 TokenSource.Cancel();
+                TokenSource.Dispose();
                 TokenSource = new CancellationTokenSource();
 
                 if (job.Type == JobType.STOP) {

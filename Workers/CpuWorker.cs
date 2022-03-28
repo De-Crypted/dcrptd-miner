@@ -55,7 +55,7 @@ namespace dcrpt_miner
                         }
 
                         if (count == 0) {
-                            ++StatusManager.HashCount[id];
+                            StatusManager.CpuHashCount[id] += 100000;
                             count = 100000;
                             if (id < 2) {
                                 // Be nice to other threads and processes
