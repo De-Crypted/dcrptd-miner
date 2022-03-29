@@ -62,19 +62,19 @@ namespace dcrpt_miner
                                 ++Program.AcceptedShares;
 
                                 Console.ForegroundColor = ConsoleColor.DarkGreen;
-                                Console.WriteLine("{0:T}: Share #{1} accepted ({2} ms)", DateTime.Now, Program.Shares, sw.Elapsed.Milliseconds);
+                                Console.WriteLine("{0:T}: {1} #{2} accepted ({3} ms)", DateTime.Now, ConnectionProvider.SolutionName, Program.Shares, sw.Elapsed.Milliseconds);
                                 Console.ResetColor();
                                 break;
                             case SubmitResult.REJECTED:
                                 ++Program.RejectedShares;
 
                                 Console.ForegroundColor = ConsoleColor.DarkRed;
-                                Console.WriteLine("{0:T}: Share #{1} rejected ({2} ms)", DateTime.Now, Program.Shares, sw.Elapsed.Milliseconds);
+                                Console.WriteLine("{0:T}: {1} #{2} rejected ({3} ms)", DateTime.Now, ConnectionProvider.SolutionName, Program.Shares, sw.Elapsed.Milliseconds);
                                 Console.ResetColor();
                                 break;
                             case SubmitResult.TIMEOUT:
                                 Console.ForegroundColor = ConsoleColor.DarkRed;
-                                Console.WriteLine("{0:T}: Failed to submit share (ERR_ACK_TIMEOUT)", DateTime.Now);
+                                Console.WriteLine("{0:T}: Failed to submit {1} (ERR_ACK_TIMEOUT)", DateTime.Now, ConnectionProvider.SolutionName);
                                 Console.ResetColor();
                                 break;
                         }

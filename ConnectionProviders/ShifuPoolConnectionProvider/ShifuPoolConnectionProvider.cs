@@ -14,13 +14,13 @@ namespace dcrpt_miner
 {
     public class ShifuPoolConnectionProvider : IConnectionProvider
     {
-        public IConfiguration Configuration { get; }
-        public Channels Channels { get; }
-        public ILogger<ShifuPoolConnectionProvider> Logger { get; }
+        public string SolutionName { get; } = "Share";
 
+        private IConfiguration Configuration { get; }
+        private Channels Channels { get; }
+        private ILogger<ShifuPoolConnectionProvider> Logger { get; }
         private CancellationTokenSource ThreadSource = new CancellationTokenSource();
         private BlockingCollection<Response> Results = new BlockingCollection<Response>(1);
-
         private AsyncTcpClient Client { get; set; }
         private ConcurrentQueue<DateTime> LastShares = new ConcurrentQueue<DateTime>();
         private Job CurrentJob { get; set; }

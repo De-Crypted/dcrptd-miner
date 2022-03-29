@@ -1,4 +1,5 @@
 using System;
+using System.Net.Http;
 using System.Text;
 using System.Collections.Generic;
 using Microsoft.Extensions.Configuration;
@@ -21,7 +22,10 @@ namespace dcrpt_miner
                 case "shifu":
                     services.AddSingleton<IConnectionProvider, ShifuPoolConnectionProvider>();
                     break;
-
+                case "bamboo":
+                    services.AddHttpClient();
+                    services.AddSingleton<IConnectionProvider, BambooNodeConnectionProvider>();
+                    break;
 
                 default:
                     throw new Exception("Unknown protocol");

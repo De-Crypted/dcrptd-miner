@@ -7,6 +7,8 @@ namespace dcrpt_miner
 {
     public class DcrptConnectionProvider : IConnectionProvider
     {
+        public string SolutionName { get; } = "Share";
+        
         private IConfiguration Configuration { get; }
         private Channels Channels { get; }
         private HubConnection Connection { get; set; }
