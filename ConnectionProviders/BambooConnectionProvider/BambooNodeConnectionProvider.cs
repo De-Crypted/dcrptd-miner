@@ -126,7 +126,7 @@ namespace dcrpt_miner
                     var transactions = await GetTransactions();
                     if (!transactions.success)
                     {
-                        Logger.LogInformation("Transactions failed");    
+                        Logger.LogInformation("Transactions failed");
                     }
 
                     Logger.LogDebug("{}: New Block = {}, Difficulty = {}, Transactions = {}",
