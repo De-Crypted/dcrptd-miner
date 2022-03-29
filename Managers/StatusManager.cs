@@ -147,7 +147,7 @@ namespace dcrpt_miner
             }
         }
 
-        private async void ReportProgress(CancellationToken token)
+        private void ReportProgress(CancellationToken token)
         {
             var gpuEnabled = Configuration.GetValue<bool>("gpu:enabled");
             var cpuEnabled = Configuration.GetValue<bool>("cpu:enabled");
