@@ -241,8 +241,8 @@ namespace dcrpt_miner
             var foundLen = new IntPtr(maxGlobalSize * sizeof(byte));
             var countLen = new IntPtr(sizeof(int));
 
-            var globalDimension = new IntPtr[] { new IntPtr(maxGlobalSize), new IntPtr(maxGlobalSize1) };
-            var localDimension = new IntPtr[] { new IntPtr(maxLocalSize / 2), new IntPtr(1) };
+            var globalDimension = new IntPtr[] { new IntPtr(maxGlobalSize) };
+            var localDimension = new IntPtr[] { new IntPtr(maxLocalSize / 2) };
 
             var concatBuf = Cl.CreateBuffer(context, MemFlags.AllocHostPtr | MemFlags.ReadOnly, concatLen, null, out error);
             error.ThrowIfError();
