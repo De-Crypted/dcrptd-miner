@@ -273,7 +273,7 @@ namespace dcrpt_miner
                             var txCount = bytes.Length / txSize;
                             for (int i = 0; i < txCount; i++) {
                                 byte[] subBytes = new byte[txSize];
-                                Array.Copy(bytes, i * txSize, subBytes, (i * txSize) + txSize, txSize);
+                                Array.Copy(bytes, i * txSize, subBytes, 0, txSize);
 
                                 GCHandle handle = GCHandle.Alloc(subBytes, GCHandleType.Pinned);
                                 try

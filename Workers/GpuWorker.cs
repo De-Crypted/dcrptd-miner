@@ -1,116 +1,18 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Diagnostics;
-using System.IO;
 using System.Linq;
-using System.Numerics;
-using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Threading;
-using System.Threading.Tasks;
-using System.Runtime.CompilerServices;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
-using OpenCL.NetCore;
-using OpenCL.NetCore.Extensions;
+using dcrpt_miner.OpenCL;
+using System.IO;
+using System.Diagnostics;
 
 namespace dcrpt_miner
 {
-    public static partial class Cl2
-    {
-        [DllImport(Cl.Library)]
-        private static extern IntPtr clEnqueueMapBuffer(IntPtr commandQueue,
-                                                        IntPtr buffer,
-                                                        Bool blockingMap,
-                                                        MapFlags mapFlags,
-                                                        IntPtr offset,
-                                                        IntPtr cb,
-                                                        uint numEventsInWaitList,
-                                                        [In] [MarshalAs(UnmanagedType.LPArray, ArraySubType = UnmanagedType.SysUInt, SizeParamIndex = 6)] Event[] eventWaitList,
-                                                        [Out] [MarshalAs(UnmanagedType.Struct)] out Event e,
-                                                        out ErrorCode errCodeRet);
-
-        public static IntPtr EnqueueMapBuffer(CommandQueue commandQueue,
-                                                  IMem buffer,
-                                                  Bool blockingMap,
-                                                  MapFlags mapFlags,
-                                                  IntPtr offset,
-                                                  IntPtr cb,
-                                                  uint numEventsInWaitList,
-                                                  Event[] eventWaitList,
-                                                  out Event e,
-                                                  out ErrorCode errCodeRet)
-        {
-            var cHandle = commandQueue.GetType().GetField("_handle", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.GetField);
-            var bHandle = buffer.GetType().GetField("_handle", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.GetField);
-
-            return clEnqueueMapBuffer((IntPtr)cHandle.GetValue(commandQueue), (IntPtr)bHandle.GetValue(buffer), 
-                                                     blockingMap, mapFlags, offset, cb, numEventsInWaitList, eventWaitList, out e, out errCodeRet);
-        }
-
-        [DllImport(Cl.Library)]
-        public static extern ErrorCode clReleaseMemObject(IntPtr memObj);
-
-        [DllImport(Cl.Library)]
-        private static extern ErrorCode clEnqueueUnmapMemObject(IntPtr commandQueue,
-                                                                IntPtr memObj,
-                                                                IntPtr mappedPtr,
-                                                                uint numEventsInWaitList,
-                                                                [In] [MarshalAs(UnmanagedType.LPArray, ArraySubType = UnmanagedType.SysUInt, SizeParamIndex = 3)] Event[] eventWaitList,
-                                                                [Out] [MarshalAs(UnmanagedType.Struct)] out Event e);
-        public static ErrorCode EnqueueUnmapObject(CommandQueue commandQueue,
-                                                   IMem memObj,
-                                                   IntPtr mappedObject,
-                                                   uint numEventsInWaitList,
-                                                   Event[] eventWaitList,
-                                                   out Event e)
-        {
-            var cHandle = commandQueue.GetType().GetField("_handle", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.GetField);
-            var bHandle = memObj.GetType().GetField("_handle", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.GetField);
-
-            return clEnqueueUnmapMemObject((IntPtr)cHandle.GetValue(commandQueue), (IntPtr)bHandle.GetValue(memObj), 
-                mappedObject, numEventsInWaitList, eventWaitList, out e);
-        }
-
-        [DllImport(Cl.Library)]
-        public static extern ErrorCode clSetEventCallback(Event @event, 
-                                                        Int32 command_exec_callback_type, 
-                                                        ComputeEventCallback pfn_notify, 
-                                                        IntPtr user_data);
-
-        public static ErrorCode SetEventCallback(Event @event, 
-                                                Int32 command_exec_callback_type, 
-                                                ComputeEventCallback pfn_notify, 
-                                                IntPtr user_data)
-        {
-            return clSetEventCallback(@event, command_exec_callback_type, pfn_notify, user_data);
-        }
-
-        public delegate void ComputeEventCallback(Event eventHandle, int cmdExecStatusOrErr, IntPtr userData);
-
-        public static void NvidiaWait(this Event @event, int milliseconds) {
-            ManualResetEvent eventSignal = new ManualResetEvent(false);
-
-            var callback = new Cl2.ComputeEventCallback((Event eventHandle, int cmdExecStatusOrErr, IntPtr userData) => {
-                eventSignal.Set();
-                eventSignal.Dispose();
-
-                var handle = GCHandle.FromIntPtr(userData);
-                handle.Free();
-
-                eventHandle.Dispose();
-            });
-
-            var handle = GCHandle.Alloc(callback);
-            var handlePointer = GCHandle.ToIntPtr(handle);
-
-            Cl2.SetEventCallback(@event, 0, callback, handlePointer);
-
-            eventSignal.WaitOne(milliseconds);
-        }
-    }
 
     class GpuWorker
     {
@@ -118,7 +20,6 @@ namespace dcrpt_miner
 
         public static List<GpuDevice> QueryDevices(IConfiguration configuration, ILoggerFactory loggerFactory)
         {
-            ErrorCode error;
             var logger = loggerFactory.CreateLogger<GpuWorker>();
 
             try {
@@ -134,23 +35,46 @@ namespace dcrpt_miner
 
                 int id = 0;
 
-                var platforms = Cl.GetPlatformIDs(out error);
-                error.ThrowIfError();
+                Cl.clGetPlatformIDs(0, null, out var numPlatforms)
+                    .ThrowIfError();
+
+                var platforms = new IntPtr[numPlatforms];
+
+                Cl.clGetPlatformIDs(numPlatforms, platforms, out numPlatforms)
+                    .ThrowIfError();
 
                 foreach (var platform in platforms) {
-                    var platformName = Cl.GetPlatformInfo(platform, PlatformInfo.Vendor, out error);
-                    error.ThrowIfError();
+                     Cl.clGetPlatformInfo(platform, ClPlatformInfo.Vendor, IntPtr.Zero, IntPtr.Zero, out var platformSize)
+                        .ThrowIfError();
 
-                    var devices = Cl.GetDeviceIDs(platform, DeviceType.All, out error);
-                    error.ThrowIfError();
+                    var platformBuf = Marshal.AllocHGlobal(platformSize);
+
+                    Cl.clGetPlatformInfo(platform, ClPlatformInfo.Vendor, platformSize, platformBuf, out _)
+                        .ThrowIfError();
+
+                    Cl.clGetDeviceIDs(platform, ClDeviceType.All, 0, null, out var numDevices)
+                        .ThrowIfError();
+
+                    var devices = new IntPtr[numDevices];
+
+                    Cl.clGetDeviceIDs(platform, ClDeviceType.All, numDevices, devices, out numDevices)
+                        .ThrowIfError();
 
                     foreach (var device in devices) {
-                        var deviceName = Cl.GetDeviceInfo(device, DeviceInfo.Name, out error);
-                        error.ThrowIfError();
+                        Cl.clGetDeviceInfo(device, ClDeviceInfo.Name, IntPtr.Zero, IntPtr.Zero, out var deviceSize)
+                            .ThrowIfError();
+
+                        var deviceBuf = Marshal.AllocHGlobal(deviceSize);
+
+                        Cl.clGetDeviceInfo(device, ClDeviceInfo.Name, deviceSize, deviceBuf, out _)
+                            .ThrowIfError();
+
+                        var platformName = Marshal.PtrToStringAnsi(platformBuf);
+                        var deviceName = Marshal.PtrToStringAnsi(deviceBuf);
 
                         Console.WriteLine("[{0}]: {1}{2}",  
                             id, 
-                            selectedGpus.Contains(id.ToString()) || selectedGpus.Contains(deviceName.ToString()) ? "*" : "", 
+                            selectedGpus.Contains(id.ToString()) || selectedGpus.Contains(deviceName) ? "*" : "", 
                             deviceName);
 
                         gpuDevices.Add(new GpuDevice {
@@ -162,7 +86,10 @@ namespace dcrpt_miner
                         });
 
                         id++;
+                        Marshal.FreeHGlobal(deviceBuf);
                     }
+
+                    Marshal.FreeHGlobal(platformBuf);
                 }
 
                 return gpuDevices;
@@ -171,8 +98,8 @@ namespace dcrpt_miner
             }
         }
 
-        private static void Initialize(GpuDevice device, int workSize, out Context context, out Kernel kernel) {
-            ErrorCode error;
+        private static void Initialize(GpuDevice device, int workSize, out IntPtr context, out IntPtr kernel) {
+            ClErrorCode error;
 
             var dir = Path.GetDirectoryName(Process.GetCurrentProcess().MainModule.FileName);
             var path = Path.Join(dir, "sha256_pow.cl");
@@ -181,36 +108,49 @@ namespace dcrpt_miner
                 throw new FileNotFoundException("OpenCL kernel missing: " + path);
             }
 
-            var kernelSource = File.ReadAllText(path);
+            var kernelSources = new string[] {File.ReadAllText(path) };
+            var devices = new IntPtr[] { device.Device };
 
-            context = Cl.CreateContext(null, 1, new[] { device.Device }, null, IntPtr.Zero, out error);
+            context = Cl.clCreateContext(null, (uint)devices.Length, devices, null, IntPtr.Zero, out error);
             error.ThrowIfError();
 
-            var program = Cl.CreateProgramWithSource(context, 1, new[] { kernelSource }, null, out error);
+            var program = Cl.clCreateProgramWithSource(context, (uint)kernelSources.Length, kernelSources, null, out error);
             error.ThrowIfError();
 
-            error = Cl.BuildProgram(program, 1, new[] { device.Device }, "-DWORK_SIZE=" + workSize, null, IntPtr.Zero);
+            Cl.clBuildProgram(program, (uint)devices.Length, devices, "-DWORK_SIZE=" + workSize, null, IntPtr.Zero);
             error.ThrowIfError();
 
-            var buildStatus = Cl.GetProgramBuildInfo(program, device.Device, ProgramBuildInfo.Status, out error).CastTo<BuildStatus>();
+            error = Cl.clGetProgramBuildInfo(program, device.Device, ClProgramBuildInfo.Status, IntPtr.Zero, IntPtr.Zero, out var buildStatusSize);
             error.ThrowIfError();
 
-            if (buildStatus != BuildStatus.Success) {
-                var buildInfo = Cl.GetProgramBuildInfo(program, device.Device, ProgramBuildInfo.Log, out error);
+            var buildStatusBuf = Marshal.AllocHGlobal(buildStatusSize);
+
+            error = Cl.clGetProgramBuildInfo(program, device.Device, ClProgramBuildInfo.Status, buildStatusSize, buildStatusBuf, out _);
+            error.ThrowIfError();
+
+            var buildStatus = (ClProgramBuildStatus)Marshal.ReadInt32(buildStatusBuf);
+
+            Marshal.FreeHGlobal(buildStatusBuf);
+
+            if (buildStatus != ClProgramBuildStatus.Success) {
+                error = Cl.clGetProgramBuildInfo(program, device.Device, ClProgramBuildInfo.Log, IntPtr.Zero, IntPtr.Zero, out var buildLogSize);
                 error.ThrowIfError();
-                throw new Exception(buildInfo.ToString());
+
+                var buildLogBuf = Marshal.AllocHGlobal(buildLogSize);
+
+                error = Cl.clGetProgramBuildInfo(program, device.Device, ClProgramBuildInfo.Log, buildLogSize, buildLogBuf, out _);
+                error.ThrowIfError();
+
+                throw new Exception(Marshal.PtrToStringAnsi(buildLogBuf));
             }
 
-            kernel = Cl.CreateKernel(program, "sha256_pow_kernel", out error);
-            error.ThrowIfError();
-
-            Cl.CreateKernelsInProgram(program, out error);
+            kernel = Cl.clCreateKernel(program, "sha256_pow_kernel", out error);
             error.ThrowIfError();
         }
 
         public static void DoWork(uint id, GpuDevice device, BlockingCollection<Job> queue, Channels channels, IConfiguration configuration, ILogger logger, CancellationToken token)
         {
-            ErrorCode error;
+           ClErrorCode error;
 
             byte[] buffer = new byte[4];
             _global.GetBytes(buffer);
@@ -219,13 +159,22 @@ namespace dcrpt_miner
             var workSize = configuration.GetValue<int>("gpu:work_size");
             logger.LogDebug("work_size = {}", workSize);
 
-            var workMultiplier = configuration.GetValue<int?>("gpu:work_multiplier");
+            var workMultiplier = configuration.GetValue<long?>("gpu:work_multiplier");
             logger.LogDebug("work_multiplier = {}", workMultiplier);
 
             Initialize(device, workSize, out var context, out var kernel);
 
-            var maxLocalSize = Cl.GetDeviceInfo(device.Device, DeviceInfo.MaxWorkGroupSize, out error).CastTo<int>();
-            error.ThrowIfError();
+            Cl.clGetDeviceInfo(device.Device, ClDeviceInfo.MaxWorkGroupSize, IntPtr.Zero, IntPtr.Zero, out var workGroupSize)
+                .ThrowIfError();
+
+            var workGroupSizeBuf = Marshal.AllocHGlobal(workGroupSize);
+
+            Cl.clGetDeviceInfo(device.Device, ClDeviceInfo.MaxWorkGroupSize, workGroupSize, workGroupSizeBuf, out _)
+                .ThrowIfError();
+
+            var maxLocalSize = (long)Marshal.PtrToStructure(workGroupSizeBuf, typeof(long));
+
+            Marshal.FreeHGlobal(workGroupSizeBuf);
 
             bool isNVIDIA = device.PlatformName.Contains("NVIDIA");
 
@@ -233,10 +182,17 @@ namespace dcrpt_miner
                 workMultiplier = maxLocalSize;
             }
 
+            logger.LogInformation("platform, {}, devicename, {}, maxLocalSize = {}, multiplier",
+                device.PlatformName,
+                device.DeviceName,
+                maxLocalSize,
+                workMultiplier);
+
             var maxGlobalSize = maxLocalSize * workMultiplier.Value;
             var maxGlobalSize1 = 1; //maxLocalSize / 2;
 
             var concat = new byte[64];
+
             var concatLen = new IntPtr(concat.Length * sizeof(byte));
             var foundLen = new IntPtr(maxGlobalSize * sizeof(byte));
             var countLen = new IntPtr(sizeof(int));
@@ -244,25 +200,40 @@ namespace dcrpt_miner
             var globalDimension = new IntPtr[] { new IntPtr(maxGlobalSize) };
             var localDimension = new IntPtr[] { new IntPtr(maxLocalSize / 2) };
 
-            var concatBuf = Cl.CreateBuffer(context, MemFlags.AllocHostPtr | MemFlags.ReadOnly, concatLen, null, out error);
+            var concatHandle = GCHandle.Alloc(null, GCHandleType.Pinned);
+            var foundHandle = GCHandle.Alloc(null, GCHandleType.Pinned);
+            var countHandle = GCHandle.Alloc(null, GCHandleType.Pinned);
+            
+            var concatBuf = Cl.clCreateBuffer(context, ClMemFlags.AllocHostPtr | ClMemFlags.ReadOnly, concatLen, concatHandle.AddrOfPinnedObject(), out error);
             error.ThrowIfError();
 
-            var foundBuf = Cl.CreateBuffer(context, MemFlags.AllocHostPtr | MemFlags.ReadWrite, foundLen, null, out error);
+            var foundBuf = Cl.clCreateBuffer(context, ClMemFlags.AllocHostPtr | ClMemFlags.ReadWrite, foundLen, foundHandle.AddrOfPinnedObject(), out error);
             error.ThrowIfError();
 
-            var countBuf = Cl.CreateBuffer(context, MemFlags.AllocHostPtr | MemFlags.ReadWrite, countLen, null, out error);
+            var countBuf = Cl.clCreateBuffer(context, ClMemFlags.AllocHostPtr | ClMemFlags.ReadWrite, countLen, countHandle.AddrOfPinnedObject(), out error);
             error.ThrowIfError();
 
-            var cmdQueue = Cl.CreateCommandQueue(context, device.Device, (CommandQueueProperties)0, out error);
+            var cmdQueue = Cl.clCreateCommandQueue(context, device.Device, 0, out error);
             error.ThrowIfError();
 
-            error = Cl.SetKernelArg(kernel, 0, concatBuf);
-            error.ThrowIfError();
-            error = Cl.SetKernelArg(kernel, 1, foundBuf);
-            error.ThrowIfError();
-            error = Cl.SetKernelArg(kernel, 2, countBuf);
-            error.ThrowIfError();
+            concatHandle.Free();
+            foundHandle.Free();
+            countHandle.Free();
 
+            var concatBufHandle = GCHandle.Alloc(concatBuf, GCHandleType.Pinned);
+            var foundBufHandle = GCHandle.Alloc(foundBuf, GCHandleType.Pinned);
+            var countBufHandle = GCHandle.Alloc(countBuf, GCHandleType.Pinned);
+
+            Cl.clSetKernelArg(kernel, 0, (IntPtr)IntPtr.Size, concatBufHandle.AddrOfPinnedObject())
+                .ThrowIfError();
+            Cl.clSetKernelArg(kernel, 1, (IntPtr)IntPtr.Size, foundBufHandle.AddrOfPinnedObject())
+                .ThrowIfError();
+            Cl.clSetKernelArg(kernel, 2, (IntPtr)IntPtr.Size, countBufHandle.AddrOfPinnedObject())
+                .ThrowIfError();
+
+            concatBufHandle.Free();
+            foundBufHandle.Free();
+            countBufHandle.Free();
 
             while (!token.IsCancellationRequested) {
                 var job = queue.Take(token);
@@ -281,12 +252,12 @@ namespace dcrpt_miner
                     concat[i + 32] = extranonce[i];
                 }
 
-                var buf0 = Cl2.EnqueueMapBuffer(cmdQueue, concatBuf, Bool.True, MapFlags.Write, IntPtr.Zero, concatLen, 0, null, out var ev, out var buf0Err);
-                ev.Dispose();
-                var buf1 = Cl2.EnqueueMapBuffer(cmdQueue, foundBuf, Bool.True, MapFlags.Read | MapFlags.Write, IntPtr.Zero, foundLen, 0, null, out ev, out var buf1Err);
-                ev.Dispose();
-                var buf2 = Cl2.EnqueueMapBuffer(cmdQueue, countBuf, Bool.True, MapFlags.Read | MapFlags.Write, IntPtr.Zero, countLen, 0, null, out ev, out var buf2Err);
-                ev.Dispose();
+                var buf0 = Cl.clEnqueueMapBuffer(cmdQueue, concatBuf, true, ClMapFlags.Write, IntPtr.Zero, concatLen, 0, null, out var ev, out var buf0Err);
+                Cl.clReleaseEvent(ev);
+                var buf1 = Cl.clEnqueueMapBuffer(cmdQueue, foundBuf, true, ClMapFlags.Read | ClMapFlags.Write, IntPtr.Zero, foundLen, 0, null, out ev, out var buf1Err);
+                Cl.clReleaseEvent(ev);
+                var buf2 = Cl.clEnqueueMapBuffer(cmdQueue, countBuf, true, ClMapFlags.Read | ClMapFlags.Write, IntPtr.Zero, countLen, 0, null, out ev, out var buf2Err);
+                Cl.clReleaseEvent(ev);
 
                 buf0Err.ThrowIfError();
                 buf1Err.ThrowIfError();
@@ -295,40 +266,49 @@ namespace dcrpt_miner
                 Marshal.Copy(concat, 0, buf0, concat.Length);
                 Marshal.WriteInt32(buf2, 0);
 
-                Cl2.EnqueueUnmapObject(cmdQueue, concatBuf, buf0, 0, null, out ev)
+                Cl.clEnqueueUnmapMemObject(cmdQueue, concatBuf, buf0, 0, null, out ev)
                     .ThrowIfError();
-                ev.Dispose();
-                Cl2.EnqueueUnmapObject(cmdQueue, foundBuf, buf1, 0, null, out ev)
+                Cl.clReleaseEvent(ev);
+                Cl.clEnqueueUnmapMemObject(cmdQueue, foundBuf, buf1, 0, null, out ev)
                     .ThrowIfError();
-                ev.Dispose();
-                Cl2.EnqueueUnmapObject(cmdQueue, countBuf, buf2, 0, null, out ev)
+                Cl.clReleaseEvent(ev);
+                Cl.clEnqueueUnmapMemObject(cmdQueue, countBuf, buf2, 0, null, out ev)
                     .ThrowIfError();
-                ev.Dispose();
+                Cl.clReleaseEvent(ev);
 
-                Cl.Finish(cmdQueue);
+                Cl.clFinish(cmdQueue)
+                    .ThrowIfError();
 
                 int executionTimeMs = 200;
 
                 while(!job.CancellationToken.IsCancellationRequested) {
                     var start = DateTime.Now;
 
-                    error = Cl.EnqueueNDRangeKernel(cmdQueue, kernel, 1, null, globalDimension, localDimension, 0, null, out ev);
-                    ev.Dispose();
+                    error = Cl.clEnqueueNDRangeKernel(cmdQueue, kernel, 1, null, globalDimension, localDimension, 0, null, out ev);
+                                        Cl.clFinish(cmdQueue)
+                    .ThrowIfError();
+                    Cl.clReleaseEvent(ev);
 
-                    buf0 = Cl2.EnqueueMapBuffer(cmdQueue, concatBuf, Bool.False, MapFlags.Write, IntPtr.Zero, concatLen, 0, null, out ev, out buf0Err);
-                    ev.Dispose();
-                    buf1 = Cl2.EnqueueMapBuffer(cmdQueue, foundBuf, Bool.False, MapFlags.Read | MapFlags.Write, IntPtr.Zero, foundLen, 0, null, out ev, out buf1Err);
-                    ev.Dispose();
-                    buf2 = Cl2.EnqueueMapBuffer(cmdQueue, countBuf, Bool.False, MapFlags.Read | MapFlags.Write, IntPtr.Zero, countLen, 0, null, out var clevent, out buf2Err);
+                    buf0 = Cl.clEnqueueMapBuffer(cmdQueue, concatBuf, false, ClMapFlags.Write, IntPtr.Zero, concatLen, 0, null, out ev, out buf0Err);
+                    Cl.clReleaseEvent(ev);
+                                    Cl.clFinish(cmdQueue)
+                    .ThrowIfError();
+                    buf1 = Cl.clEnqueueMapBuffer(cmdQueue, foundBuf, false, ClMapFlags.Read | ClMapFlags.Write, IntPtr.Zero, foundLen, 0, null, out ev, out buf1Err);
+                    Cl.clReleaseEvent(ev);
+                                    Cl.clFinish(cmdQueue)
+                    .ThrowIfError();
+                    buf2 = Cl.clEnqueueMapBuffer(cmdQueue, countBuf, false, ClMapFlags.Read | ClMapFlags.Write, IntPtr.Zero, countLen, 0, null, out var clevent, out buf2Err);
 
-                    cmdQueue.Flush();
+                    Cl.clFlush(cmdQueue)
+                        .ThrowIfError();
 
                     if (isNVIDIA) {
                         var maxWaitTime = Math.Max(executionTimeMs - 20, 1);
-                        clevent.NvidiaWait(maxWaitTime);
+                        Cl.NvidiaWait(clevent, maxWaitTime);
                     }
 
-                    cmdQueue.Finish();
+                    Cl.clFinish(cmdQueue)
+                        .ThrowIfError();
 
                     var end = DateTime.Now;
                     executionTimeMs = (int)(end - start).TotalMilliseconds;
@@ -344,15 +324,15 @@ namespace dcrpt_miner
 
                     if (count > 0) {
                         if (job.CancellationToken.IsCancellationRequested) {
-                            Cl2.EnqueueUnmapObject(cmdQueue, concatBuf, buf0, 0, null, out ev)
+                            Cl.clEnqueueUnmapMemObject(cmdQueue, concatBuf, buf0, 0, null, out ev)
                                 .ThrowIfError();
-                            ev.Dispose();
-                            Cl2.EnqueueUnmapObject(cmdQueue, foundBuf, buf1, 0, null, out ev)
+                            Cl.clReleaseEvent(ev);
+                            Cl.clEnqueueUnmapMemObject(cmdQueue, foundBuf, buf1, 0, null, out ev)
                                 .ThrowIfError();
-                            ev.Dispose();
-                            Cl2.EnqueueUnmapObject(cmdQueue, countBuf, buf2, 0, null, out ev)
+                            Cl.clReleaseEvent(ev);
+                            Cl.clEnqueueUnmapMemObject(cmdQueue, countBuf, buf2, 0, null, out ev)
                                 .ThrowIfError();
-                            ev.Dispose();
+                            Cl.clReleaseEvent(ev);
                             break;
                         }
 
@@ -373,15 +353,15 @@ namespace dcrpt_miner
                     // increment nonce
                     Marshal.WriteInt64(buf0, 33, Marshal.ReadInt64(buf0, 33) + 1);
 
-                    Cl2.EnqueueUnmapObject(cmdQueue, concatBuf, buf0, 0, null, out ev)
+                    Cl.clEnqueueUnmapMemObject(cmdQueue, concatBuf, buf0, 0, null, out ev)
                         .ThrowIfError();
-                    ev.Dispose();
-                    Cl2.EnqueueUnmapObject(cmdQueue, foundBuf, buf1, 0, null, out ev)
+                    Cl.clReleaseEvent(ev);
+                    Cl.clEnqueueUnmapMemObject(cmdQueue, foundBuf, buf1, 0, null, out ev)
                         .ThrowIfError();
-                    ev.Dispose();
-                    Cl2.EnqueueUnmapObject(cmdQueue, countBuf, buf2, 0, null, out ev)
+                    Cl.clReleaseEvent(ev);
+                    Cl.clEnqueueUnmapMemObject(cmdQueue, countBuf, buf2, 0, null, out ev)
                         .ThrowIfError();
-                    ev.Dispose();
+                    Cl.clReleaseEvent(ev);
 
                     StatusManager.GpuHashCount[id] += (ulong)maxGlobalSize * (ulong)maxGlobalSize1 * (ulong)workSize;
                 }
@@ -389,15 +369,18 @@ namespace dcrpt_miner
                 GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced);
             }
 
-            Cl.ReleaseMemObject(concatBuf);
-            Cl.ReleaseMemObject(foundBuf);
-            Cl.ReleaseMemObject(countBuf);
+            Cl.clReleaseMemObject(concatBuf)
+                .ThrowIfError();
+            Cl.clReleaseMemObject(foundBuf)
+                .ThrowIfError();
+            Cl.clReleaseMemObject(countBuf)
+                .ThrowIfError();
         }
     }
 
     public class GpuDevice {
-        public Device Device { get; set; }
-        public Platform Platform { get; set; }
+        public IntPtr Device { get; set; }
+        public IntPtr Platform { get; set; }
         public string PlatformName { get; set; }
         public string DeviceName { get; set; }
         public int Id { get; set; }
