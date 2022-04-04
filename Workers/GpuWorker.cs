@@ -285,25 +285,19 @@ namespace dcrpt_miner
                     var start = DateTime.Now;
 
                     error = Cl.clEnqueueNDRangeKernel(cmdQueue, kernel, 1, null, globalDimension, localDimension, 0, null, out ev);
-                                        Cl.clFinish(cmdQueue)
-                    .ThrowIfError();
                     Cl.clReleaseEvent(ev);
 
                     buf0 = Cl.clEnqueueMapBuffer(cmdQueue, concatBuf, false, ClMapFlags.Write, IntPtr.Zero, concatLen, 0, null, out ev, out buf0Err);
                     Cl.clReleaseEvent(ev);
-                                    Cl.clFinish(cmdQueue)
-                    .ThrowIfError();
                     buf1 = Cl.clEnqueueMapBuffer(cmdQueue, foundBuf, false, ClMapFlags.Read | ClMapFlags.Write, IntPtr.Zero, foundLen, 0, null, out ev, out buf1Err);
                     Cl.clReleaseEvent(ev);
-                                    Cl.clFinish(cmdQueue)
-                    .ThrowIfError();
                     buf2 = Cl.clEnqueueMapBuffer(cmdQueue, countBuf, false, ClMapFlags.Read | ClMapFlags.Write, IntPtr.Zero, countLen, 0, null, out var clevent, out buf2Err);
 
                     Cl.clFlush(cmdQueue)
                         .ThrowIfError();
 
                     if (isNVIDIA) {
-                        var maxWaitTime = Math.Max(executionTimeMs - 20, 1);
+                        var maxWaitTime = Math.Max(executionTimeMs - 50, 1);
                         Cl.NvidiaWait(clevent, maxWaitTime);
                     }
 
