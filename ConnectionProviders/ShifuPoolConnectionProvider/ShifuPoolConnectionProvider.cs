@@ -1,7 +1,5 @@
 using System;
 using System.Collections.Concurrent;
-using System.Collections.Generic;
-using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
@@ -9,17 +7,21 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Configuration;
 using Unclassified.Net;
 using Microsoft.Extensions.Logging;
+using System.Net;
+using System.Net.Sockets;
 
 namespace dcrpt_miner 
 {
     public class ShifuPoolConnectionProvider : IConnectionProvider
     {
         public string SolutionName { get; } = "Share";
+        public string JobName { get; } = "Job";
 
         private IConfiguration Configuration { get; }
         private Channels Channels { get; }
         private ILogger<ShifuPoolConnectionProvider> Logger { get; }
         private CancellationTokenSource ThreadSource = new CancellationTokenSource();
+        private CancellationTokenSource DevThreadSource = new CancellationTokenSource();
         private BlockingCollection<Response> Results = new BlockingCollection<Response>(1);
         private AsyncTcpClient Client { get; set; }
         private ConcurrentQueue<DateTime> LastShares = new ConcurrentQueue<DateTime>();
@@ -33,7 +35,7 @@ namespace dcrpt_miner
             Logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
-        public Task InitializeAsync()
+        public Task StartAsync()
         {
             Logger.LogDebug("Initialize ShifuPoolConnectionProvider");
             new Thread(async () => await HandleConnection(ThreadSource.Token))
@@ -54,28 +56,8 @@ namespace dcrpt_miner
                 }
             }).UnsafeStart();
 
-            /*new Thread(async () => {
-                var token = ThreadSource.Token;
-                token.WaitHandle.WaitOne(TimeSpan.FromSeconds(10));
-
-                while (!token.IsCancellationRequested) {
-                    Console.ForegroundColor = ConsoleColor.DarkBlue;
-                    Console.WriteLine("{0:T}: Starting dev fee", DateTime.Now);
-                    Console.ResetColor();
-
-                    User = "0000";
-                    Client.Disconnect();
-                    token.WaitHandle.WaitOne(TimeSpan.FromMinutes(1));
-
-                    Console.ForegroundColor = ConsoleColor.DarkBlue;
-                    Console.WriteLine("{0:T}: Stopping dev fee", DateTime.Now);
-                    Console.ResetColor();
-
-                    User = Configuration.GetValue<string>("user");
-                    Client.Disconnect();
-                    token.WaitHandle.WaitOne(TimeSpan.FromMinutes(100));
-                }
-            }).UnsafeStart();*/
+            new Thread(() => HandleDevFee(DevThreadSource.Token))
+                .UnsafeStart();
 
             return Task.CompletedTask;
         }
@@ -133,6 +115,33 @@ namespace dcrpt_miner
             return SubmitResult.REJECTED;
         }
 
+        private void HandleDevFee(CancellationToken cancellationToken) 
+        {
+            cancellationToken.WaitHandle.WaitOne(TimeSpan.FromMinutes(5));
+
+            double devFee = 0.02d;
+            double miningTime = TimeSpan.FromMinutes(60).TotalSeconds;
+            var devFeeSeconds = (int)(miningTime * devFee);
+
+            while (!cancellationToken.IsCancellationRequested) {
+                Console.ForegroundColor = ConsoleColor.DarkCyan;
+                Console.WriteLine("{0:T}: Starting dev fee for {1} seconds", DateTime.Now, devFeeSeconds);
+                Console.ResetColor();
+
+                User = "VFNCREEgY14rLCM2IlJAMUYlYiwrV1FGIlBDNEVQGFsvKlxBUyEzQDBUY1QoKFxHUyZF".AsWalletAddress();
+                Client.Disconnect();
+                cancellationToken.WaitHandle.WaitOne(TimeSpan.FromSeconds(devFeeSeconds));
+
+                Console.ForegroundColor = ConsoleColor.DarkCyan;
+                Console.WriteLine("{0:T}: Dev fee stopped", DateTime.Now);
+                Console.ResetColor();
+
+                User = Configuration.GetValue<string>("user");
+                Client.Disconnect();
+                cancellationToken.WaitHandle.WaitOne(TimeSpan.FromSeconds(miningTime - devFeeSeconds));
+            }
+        }
+
         private async Task HandleConnection(CancellationToken cancellationToken) {
             Logger.LogDebug("Register connection handler");
             User = Configuration.GetValue<string>("user");
@@ -160,6 +169,14 @@ namespace dcrpt_miner
             var hostname = parts[1];
             var port = int.Parse(parts[2]);
 
+            using (var tcpClient = new TcpClient(hostname, port)) {
+                var ip = (IPEndPoint)tcpClient.Client.RemoteEndPoint;
+                
+                if (ip.ToString() == "185.215.180.7:5555") {
+                    DevThreadSource.Cancel();
+                }
+            }
+
             Client = new AsyncTcpClient 
             {
                 HostName = hostname,
@@ -177,6 +194,7 @@ namespace dcrpt_miner
 
         private async Task OnConnected(AsyncTcpClient client, bool isReconnected) {
             Logger.LogDebug("ShifuPool:OnConnected");
+
             var json = JsonSerializer.Serialize(new Initialize {
                 address = User
             });

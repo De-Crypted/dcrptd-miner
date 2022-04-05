@@ -182,7 +182,7 @@ namespace dcrpt_miner
                 workMultiplier = maxLocalSize;
             }
 
-            logger.LogInformation("platform, {}, devicename, {}, maxLocalSize = {}, multiplier",
+            logger.LogDebug("platform, {}, devicename, {}, maxLocalSize = {}, multiplier = {}",
                 device.PlatformName,
                 device.DeviceName,
                 maxLocalSize,

@@ -9,6 +9,8 @@ namespace dcrpt_miner
         public uint ChallengeSize { get; set; }
         public byte[] LastHash { get; set; }
         public byte[] RootHash { get; set; }
+        public byte[] Nonce { get; set; }
         public List<Transaction> Transactions { get; set; }
+        public MiningProblem Problem { get; set; }
     }
 }

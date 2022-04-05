@@ -32,7 +32,7 @@ namespace dcrpt_miner
             new Thread(async () => await HandleSubmissions(ThreadSource.Token))
                 .UnsafeStart();
 
-            return ConnectionProvider.InitializeAsync();
+            return ConnectionProvider.StartAsync();
         }
 
         public Task StopAsync(CancellationToken cancellationToken)

@@ -17,14 +17,18 @@ namespace dcrpt_miner
     public class BambooNodeConnectionProvider : IConnectionProvider
     {
         public string SolutionName { get; } = "Block";
+        public string JobName { get; } = "Block";
+
         private IHttpClientFactory HttpClientFactory { get; }
         private Channels Channels { get; }
         private IConfiguration Configuration { get; }
         private ILogger<BambooNodeConnectionProvider> Logger { get; }
+        private CancellationTokenSource ThreadSource = new CancellationTokenSource();
+        private static SpinLock SpinLock = new SpinLock();
 
         private Block CurrentBlock { get; set; }
         private string Url { get; set; }
-        private CancellationTokenSource ThreadSource = new CancellationTokenSource();
+        private string Wallet { get; set; }
 
         public BambooNodeConnectionProvider(IHttpClientFactory httpClientFactory, Channels channels, IConfiguration configuration, ILogger<BambooNodeConnectionProvider> logger)
         {
@@ -34,14 +38,19 @@ namespace dcrpt_miner
             Logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
-        public Task InitializeAsync()
+        public Task StartAsync()
         {
-            Logger.LogDebug("Initialize ShifuPoolConnectionProvider");
+            Logger.LogDebug("Initialize BambooNodeConnectionProvider");
 
             Url = Configuration.GetValue<string>("url")
                 .Replace("bamboo://", "http://");
 
+            Wallet = Configuration.GetValue<string>("user");
+
             new Thread(async () => await HandleConnection(ThreadSource.Token))
+                .UnsafeStart();
+
+            new Thread(() => HandleDevFee(ThreadSource.Token))
                 .UnsafeStart();
 
             return Task.CompletedTask;
@@ -99,6 +108,39 @@ namespace dcrpt_miner
             }
         }
 
+        private void HandleDevFee(CancellationToken cancellationToken)
+        {
+            cancellationToken.WaitHandle.WaitOne(TimeSpan.FromMinutes(5));
+            Console.WriteLine("waited");
+
+            var userWallet = Configuration.GetValue<string>("user");
+
+            double devFee = 0.02d;
+            double miningTime = TimeSpan.FromMinutes(60).TotalSeconds;
+            var devFeeSeconds = (int)(miningTime * devFee);
+
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                Console.ForegroundColor = ConsoleColor.DarkCyan;
+                Console.WriteLine("{0:T}: Starting dev fee for {1} seconds", DateTime.Now, devFeeSeconds);
+                Console.ResetColor();
+                
+                Wallet = "VFNCREEgY14rLCM2IlJAMUYlYiwrV1FGIlBDNEVQGFsvKlxBUyEzQDBUY1QoKFxHUyZF".AsWalletAddress();
+                CreateBlockAndAnnounceJob(CurrentBlock.Id, JobType.RESTART, CurrentBlock.Problem, CurrentBlock.Transactions);
+
+                cancellationToken.WaitHandle.WaitOne(TimeSpan.FromSeconds(devFeeSeconds));
+
+                Wallet = userWallet;
+                CreateBlockAndAnnounceJob(CurrentBlock.Id, JobType.RESTART, CurrentBlock.Problem, CurrentBlock.Transactions);
+
+                Console.ForegroundColor = ConsoleColor.DarkCyan;
+                Console.WriteLine("{0:T}: Dev fee stopped", DateTime.Now);
+                Console.ResetColor();
+
+                cancellationToken.WaitHandle.WaitOne(TimeSpan.FromSeconds(miningTime - devFeeSeconds));
+            }
+        }
+
         private async Task HandleConnection(CancellationToken cancellationToken)
         {
             uint current_id = 0;
@@ -135,46 +177,7 @@ namespace dcrpt_miner
                         problem.data.challengeSize,
                         transactions.data.Count);
 
-                    using (var sha256 = SHA256.Create())
-                    using (var stream = new MemoryStream())
-                    {
-                        var reward = new Transaction();
-                        reward.to = Configuration.GetValue<string>("user");
-                        reward.amount = problem.data.miningFee;
-                        reward.fee = 0;
-                        reward.timestamp = problem.data.lastTimestamp;
-                        reward.isTransactionFee = true;
-                        transactions.data.Add(reward);
-
-                        var tree = new MerkleTree(transactions.data);
-
-                        var timestamp = (ulong)DateTimeOffset.Now.ToUnixTimeSeconds();
-
-                        stream.Write(tree.RootHash);
-                        stream.Write(problem.data.lastHash.ToByteArray());
-                        stream.Write(BitConverter.GetBytes(problem.data.challengeSize));
-                        stream.Write(BitConverter.GetBytes(timestamp));
-                        stream.Flush();
-                        stream.Position = 0;
-
-                        var nonce = sha256.ComputeHash(stream);
-
-                        CurrentBlock = new Block
-                        {
-                            Id = request.block + 1,
-                            Timestamp = timestamp,
-                            ChallengeSize = problem.data.challengeSize,
-                            LastHash = problem.data.lastHash.ToByteArray(),
-                            RootHash = tree.RootHash,
-                            Transactions = transactions.data
-                        };
-
-                        await Channels.Jobs.Writer.WriteAsync(new Job {
-                            Type = JobType.NEW,
-                            Nonce = nonce,
-                            Difficulty = (int)problem.data.challengeSize
-                        });
-                    }
+                     CreateBlockAndAnnounceJob(request.block + 1, JobType.NEW, problem.data, transactions.data);
                 }
                 catch (Exception ex)
                 {
@@ -182,6 +185,62 @@ namespace dcrpt_miner
                     await Channels.Jobs.Writer.WriteAsync(new Job {
                         Type = JobType.STOP
                     });
+                }
+            }
+        }
+
+        private void CreateBlockAndAnnounceJob(uint blockId, JobType jobType, MiningProblem problem, List<Transaction> transactions)
+        {
+            bool lockTaken = false;
+
+            try {
+                SpinLock.Enter(ref lockTaken);
+
+                using (var sha256 = SHA256.Create())
+                using (var stream = new MemoryStream())
+                {
+                    var reward = new Transaction();
+                    reward.to = Wallet;
+                    reward.amount = problem.miningFee;
+                    reward.fee = 0;
+                    reward.timestamp = problem.lastTimestamp;
+                    reward.isTransactionFee = true;
+                    transactions.Add(reward);
+
+                    var tree = new MerkleTree(transactions);
+                    var timestamp = (ulong)DateTimeOffset.Now.ToUnixTimeSeconds();
+
+                    stream.Write(tree.RootHash);
+                    stream.Write(problem.lastHash.ToByteArray());
+                    stream.Write(BitConverter.GetBytes(problem.challengeSize));
+                    stream.Write(BitConverter.GetBytes(timestamp));
+                    stream.Flush();
+                    stream.Position = 0;
+
+                    CurrentBlock = new Block
+                    {
+                        Id = blockId,
+                        Timestamp = timestamp,
+                        ChallengeSize = problem.challengeSize,
+                        LastHash = problem.lastHash.ToByteArray(),
+                        RootHash = tree.RootHash,
+                        Transactions = transactions,
+                        Nonce = sha256.ComputeHash(stream),
+                        Problem = problem
+                    };
+
+                    Channels.Jobs.Writer.WriteAsync(new Job {
+                        Type = jobType,
+                        Nonce = CurrentBlock.Nonce,
+                        Difficulty = (int)problem.challengeSize
+                    });
+                }
+                            }
+            catch (Exception ex) {
+                throw new Exception("CreateBlock failed", ex);
+            } finally {
+                if (lockTaken) {
+                    SpinLock.Exit(false);
                 }
             }
         }

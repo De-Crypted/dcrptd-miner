@@ -8,6 +8,7 @@ namespace dcrpt_miner
     public class DcrptConnectionProvider : IConnectionProvider
     {
         public string SolutionName { get; } = "Share";
+        public string JobName { get; } = "Job";
         
         private IConfiguration Configuration { get; }
         private Channels Channels { get; }
@@ -19,7 +20,7 @@ namespace dcrpt_miner
             Channels = channels ?? throw new ArgumentNullException(nameof(channels));
         }
 
-        public async Task InitializeAsync() 
+        public async Task StartAsync() 
         {
             var url = Configuration.GetValue<string>("url").Replace("dcrpt", "http");
             Connection = new HubConnectionBuilder()

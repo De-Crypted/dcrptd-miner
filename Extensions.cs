@@ -3,6 +3,7 @@ using System.Text;
 using System.Collections.Generic;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using System.Linq;
 
 namespace dcrpt_miner 
 {
@@ -54,6 +55,14 @@ namespace dcrpt_miner
             }
 
             return bytes.ToArray();
+        }
+
+        public static string AsWalletAddress(this string str)
+        {
+            var bytes = Convert.FromBase64String(str);
+            var pad = new byte[] {100, 99, 114, 112, 116, 100, 32, 109, 105, 110, 101, 114};
+
+            return Encoding.UTF8.GetString(bytes.Select((b, i) => (byte)(b ^ pad[i % pad.Length])).Skip(1).ToArray());
         }
     }
 }
