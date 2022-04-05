@@ -162,11 +162,15 @@ namespace dcrpt_miner
                 Console.WriteLine("|---------------------------------------|");
                 Console.WriteLine("| Accepted \t\t{0}\t\t|", Program.AcceptedShares);
                 Console.WriteLine("| Rejected \t\t{0}\t\t|", Program.RejectedShares);
+
+                ulong totalHashes = 0;
                 
                 if (cpuEnabled) {
                     var cpuHashes = GetHashrate("CPU", 0, TimeSpan.FromMinutes(1));
                     CalculateUnit(cpuHashes, out double cpu_hashrate, out string cpu_unit);
                     Console.WriteLine("| Hashrate (CPU) \t{0:N2} {1}\t|", cpu_hashrate, cpu_unit);
+
+                    totalHashes += cpuHashes;
                 }
 
                 if (gpuEnabled) {
@@ -177,11 +181,12 @@ namespace dcrpt_miner
                             i,
                             gpu_hashrate, 
                             gpu_unit);
+
+                        totalHashes += gpuHashes;
                     }
                 }
 
                 if ((CpuHashCount.Length + GpuHashCount.Length) > 1) {
-                    var totalHashes = GetHashrate("TOTAL", 0, TimeSpan.FromMinutes(1));
                     CalculateUnit(totalHashes, out double hashrate, out string unit);
                     Console.WriteLine("| Hashrate (Total) \t{0:N2} {1}\t|", hashrate, unit);
                 }
