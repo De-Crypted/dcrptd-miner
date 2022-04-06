@@ -83,7 +83,7 @@ namespace dcrpt_miner
                     selfAdjust = true;
                 }
 
-                Logger.LogDebug("Is diffuclty adjustment required? {}", selfAdjust);
+                Logger.LogDebug("Is difficulty adjustment required? {}", selfAdjust);
 
                 if (selfAdjust) {
                     Logger.LogDebug("Too many shares submitted, readjust difficulty...");
