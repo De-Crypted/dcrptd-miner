@@ -1,8 +1,14 @@
 {
-    "_url": "Pool url. Address prefix determines protocol used.",
-    "url": "shifu://185.215.180.7:5555",
+    "_url": "Pool or node url. You can set multiple addresses, first one will be used as default and if connection fails miner will move to next one. Address prefix determines protocol used.",
+    "url": [
+        "shifu://185.215.180.7:5555"
+    ],
     "_user": "Wallet address",
     "user": "WALLET_ADDRESS_HERE",
+    "_retries": "Specifies how many times miner will try to connect to a specific url until selecting next",
+    "retries": 5,
+    "_action_after_retries_done": "Set action on what to do after all urls have been retried. Possible values: RETRY (= start again from first url), EXIT (= exits the miner)",
+    "action_after_retries_done": "SHUTDOWN",
     "gpu": {
         "_enabled": "Enable or disable gpu miner",
         "enabled": true,

@@ -6,7 +6,7 @@ namespace dcrpt_miner
     {
         string JobName { get; }
         string SolutionName { get; }
-        public Task StartAsync();
+        public Task RunAsync(string url);
         public Task<SubmitResult> SubmitAsync(byte[] solution);
     }
 }

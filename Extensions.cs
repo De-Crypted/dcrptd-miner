@@ -9,29 +9,6 @@ namespace dcrpt_miner
 {
     public static class Extensions 
     {
-        public static IServiceCollection AddConnectionProvider(this IServiceCollection services) {
-            var configuration = services.BuildServiceProvider().GetService<IConfiguration>();
-            var url = configuration.GetValue<string>("url");
-
-            switch (url.Substring(0, url.IndexOf(':'))) {
-                case "dcrpt":
-                    services.AddSingleton<IConnectionProvider, DcrptConnectionProvider>();
-                    break;
-                case "shifu":
-                    services.AddSingleton<IConnectionProvider, ShifuPoolConnectionProvider>();
-                    break;
-                case "bamboo":
-                    services.AddHttpClient();
-                    services.AddSingleton<IConnectionProvider, BambooNodeConnectionProvider>();
-                    break;
-
-                default:
-                    throw new Exception("Unknown protocol");
-            }
-
-            return services;
-        }
-
         public static string AsString(this byte[] hash)
         {
             var builder = new StringBuilder();

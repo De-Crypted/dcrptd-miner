@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
@@ -11,16 +12,17 @@ namespace dcrpt_miner
 {
     public class ConnectionManager : IHostedService
     {
-        public IConnectionProvider ConnectionProvider { get; }
+        public IServiceProvider ServiceProvider { get; }
         public Channels Channels { get; }
         public IConfiguration Configuration { get; }
         public ILogger<ConnectionManager> Logger { get; }
 
+        private IConnectionProvider CurrentProvider { get; set; }
         private CancellationTokenSource ThreadSource = new CancellationTokenSource();
 
-        public ConnectionManager(IConnectionProvider connectionProvider, Channels channels, IConfiguration configuration, ILogger<ConnectionManager> logger)
+        public ConnectionManager(IServiceProvider serviceProvider, Channels channels, IConfiguration configuration, ILogger<ConnectionManager> logger)
         {
-            ConnectionProvider = connectionProvider ?? throw new System.ArgumentNullException(nameof(connectionProvider));
+            ServiceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
             Channels = channels ?? throw new System.ArgumentNullException(nameof(channels));
             Configuration = configuration ?? throw new System.ArgumentNullException(nameof(configuration));
             Logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -29,10 +31,60 @@ namespace dcrpt_miner
         public Task StartAsync(CancellationToken cancellationToken)
         {
             Logger.LogDebug("Starting ConnectionManager thread");
+
             new Thread(async () => await HandleSubmissions(ThreadSource.Token))
                 .UnsafeStart();
 
-            return ConnectionProvider.StartAsync();
+            new Thread(async () => {
+                var urls = Configuration.GetSection("url").Get<List<string>>();
+
+                if (urls == null) {
+                    urls = new List<string>();
+                }
+
+                // provides simple input from cmdline (no need to input with array index) and backwards compatibility
+                var url = Configuration.GetValue<string>("url");
+
+                if (url != null && !string.IsNullOrEmpty(url)) {
+                    urls.Clear();
+                    urls.Add(url);
+                } 
+
+                if (urls.Count == 0) {
+                    Console.ForegroundColor = ConsoleColor.DarkRed;
+                    Console.WriteLine("No url set in config.json or --url argument!");
+                    Console.ResetColor();
+
+                    Process.GetCurrentProcess().Kill();
+                    return;
+                }
+
+                var retryAction = Configuration.GetValue<RetryAction>("action_after_retries_done");
+                var keepReconnecting = retryAction == RetryAction.RETRY;
+
+                do {
+                    foreach (var _url in urls) {
+                        Console.ForegroundColor = ConsoleColor.DarkGray;
+                        Console.WriteLine("{0:T}: Connecting to {1}", DateTime.Now, _url);
+                        Console.ResetColor();
+
+                        CurrentProvider = GetConnectionProvider(_url);
+                        await CurrentProvider.RunAsync(_url);
+
+                        Console.ForegroundColor = ConsoleColor.DarkGray;
+                        Console.WriteLine("{0:T}: Disconnected from {1}", DateTime.Now, _url);
+                        Console.ResetColor();
+                    }
+                } while (keepReconnecting);
+
+                Console.ForegroundColor = ConsoleColor.DarkRed;
+                Console.WriteLine("{0:T}: Miner shutting down...", DateTime.Now);
+                Console.ResetColor();
+
+                Process.GetCurrentProcess().Kill();
+            }).UnsafeStart();
+
+            return Task.CompletedTask;
         }
 
         public Task StopAsync(CancellationToken cancellationToken)
@@ -54,27 +106,27 @@ namespace dcrpt_miner
                         ++Program.Shares;
 
                         sw.Start();
-                        var result = await ConnectionProvider.SubmitAsync(solution);
+                        var result = await CurrentProvider.SubmitAsync(solution);
                         sw.Stop();
 
                         switch(result) {
                             case SubmitResult.ACCEPTED:
-                                ++Program.AcceptedShares;
+                                ++Program.AcceptedShares; 
 
                                 Console.ForegroundColor = ConsoleColor.DarkGreen;
-                                Console.WriteLine("{0:T}: {1} #{2} accepted ({3} ms)", DateTime.Now, ConnectionProvider.SolutionName, Program.Shares, sw.Elapsed.Milliseconds);
+                                Console.WriteLine("{0:T}: {1} #{2} accepted ({3} ms)", DateTime.Now, CurrentProvider.SolutionName, Program.Shares, sw.Elapsed.Milliseconds);
                                 Console.ResetColor();
                                 break;
                             case SubmitResult.REJECTED:
                                 ++Program.RejectedShares;
 
                                 Console.ForegroundColor = ConsoleColor.DarkRed;
-                                Console.WriteLine("{0:T}: {1} #{2} rejected ({3} ms)", DateTime.Now, ConnectionProvider.SolutionName, Program.Shares, sw.Elapsed.Milliseconds);
+                                Console.WriteLine("{0:T}: {1} #{2} rejected ({3} ms)", DateTime.Now, CurrentProvider.SolutionName, Program.Shares, sw.Elapsed.Milliseconds);
                                 Console.ResetColor();
                                 break;
                             case SubmitResult.TIMEOUT:
                                 Console.ForegroundColor = ConsoleColor.DarkRed;
-                                Console.WriteLine("{0:T}: Failed to submit {1} (ERR_ACK_TIMEOUT)", DateTime.Now, ConnectionProvider.SolutionName);
+                                Console.WriteLine("{0:T}: Failed to submit {1} (ERR_ACK_TIMEOUT)", DateTime.Now, CurrentProvider.SolutionName);
                                 Console.ResetColor();
                                 break;
                         }
@@ -89,11 +141,27 @@ namespace dcrpt_miner
                 }
             } catch(System.OperationCanceledException) {
                 Logger.LogDebug("Solution reader cancelled. Shutting down...");
-            } catch (Exception ex) {
-                throw new Exception("SubmissionHandler threw error", ex);
             }
 
             Logger.LogDebug("Thread exit!");
         }
+
+        private IConnectionProvider GetConnectionProvider(string url) {
+            switch (url.Substring(0, url.IndexOf(':'))) {
+                case "dcrpt":
+                    return (IConnectionProvider)ServiceProvider.GetService(typeof(DcrptConnectionProvider));
+                case "shifu":
+                    return (IConnectionProvider)ServiceProvider.GetService(typeof(ShifuPoolConnectionProvider));
+                case "bamboo":
+                    return (IConnectionProvider)ServiceProvider.GetService(typeof(BambooNodeConnectionProvider));
+                default:
+                    throw new Exception("Unknown protocol");
+            }
+        }
+    }
+
+    public enum RetryAction {
+        RETRY,
+        SHUTDOWN
     }
 }

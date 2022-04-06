@@ -20,9 +20,8 @@ namespace dcrpt_miner
             Channels = channels ?? throw new ArgumentNullException(nameof(channels));
         }
 
-        public async Task StartAsync() 
+        public async Task RunAsync(string url) 
         {
-            var url = Configuration.GetValue<string>("url").Replace("dcrpt", "http");
             Connection = new HubConnectionBuilder()
                 .WithUrl(url + "/job")
                 .Build();

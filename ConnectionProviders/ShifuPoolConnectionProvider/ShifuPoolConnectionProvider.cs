@@ -27,7 +27,8 @@ namespace dcrpt_miner
         private ConcurrentQueue<DateTime> LastShares = new ConcurrentQueue<DateTime>();
         private Job CurrentJob { get; set; }
         private string User { get; set; }
-        
+        private string Url { get; set; }
+        private uint RetryCount { get; set; }
         public ShifuPoolConnectionProvider(IConfiguration configuration, Channels channels, ILogger<ShifuPoolConnectionProvider> logger)
         {
             Configuration = configuration ?? throw new System.ArgumentNullException(nameof(configuration));
@@ -35,11 +36,10 @@ namespace dcrpt_miner
             Logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
-        public Task StartAsync()
+        public Task RunAsync(string url)
         {
             Logger.LogDebug("Initialize ShifuPoolConnectionProvider");
-            new Thread(async () => await HandleConnection(ThreadSource.Token))
-                .UnsafeStart();
+            Url = url;
 
             new Thread(async () => {
                 ThreadSource.Token.WaitHandle.WaitOne(TimeSpan.FromSeconds(30));
@@ -59,7 +59,7 @@ namespace dcrpt_miner
             new Thread(() => HandleDevFee(DevThreadSource.Token))
                 .UnsafeStart();
 
-            return Task.CompletedTask;
+            return HandleConnection(ThreadSource.Token);
         }
 
         public async Task<SubmitResult> SubmitAsync(byte[] solution)
@@ -159,11 +159,10 @@ namespace dcrpt_miner
                 return;
             }
 
-            var url = Configuration.GetValue<string>("url");
-            var parts = url.Replace("/", String.Empty).Split(':');
+            var parts = Url.Replace("/", String.Empty).Split(':');
 
             if (parts.Length != 3) {
-                throw new Exception("Invalid hostname: " + url);
+                throw new Exception("Invalid hostname: " + Url);
             }
 
             var hostname = parts[1];
@@ -181,7 +180,7 @@ namespace dcrpt_miner
             {
                 HostName = hostname,
                 Port = port,
-                AutoReconnect = true,
+                AutoReconnect = false,
                 ConnectedCallback = OnConnected,
                 ReceivedCallback = OnReceived,
                 ClosedCallback = OnClosed
@@ -189,7 +188,16 @@ namespace dcrpt_miner
 
             Client.Message += (s, a) => Console.WriteLine(a.Message);
 
-            await Client.RunAsync();
+            var retries = Configuration.GetValue<uint?>("retries", 5);
+
+            while (RetryCount < retries) {
+                await Client.RunAsync();
+                RetryCount++;
+
+                Console.ForegroundColor = ConsoleColor.DarkRed;
+                Console.WriteLine("{0:T}: Pool connection interrupted, retrying ({1}/{2})...", DateTime.Now, RetryCount, retries);
+                Console.ResetColor();
+            }
         }
 
         private async Task OnConnected(AsyncTcpClient client, bool isReconnected) {
@@ -243,11 +251,14 @@ namespace dcrpt_miner
 
                     CurrentJob = new Job {
                         Type = JobType.NEW,
+                        Name = JobName,
                         Nonce = blockhash,
                         Difficulty = difficulty
                     };
 
                     await Channels.Jobs.Writer.WriteAsync(CurrentJob);
+
+                    RetryCount = 0;
                     return;
                 }
 

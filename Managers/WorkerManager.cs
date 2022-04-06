@@ -18,17 +18,15 @@ namespace dcrpt_miner
         private CancellationTokenSource TokenSource = new CancellationTokenSource();
         private List<BlockingCollection<Job>> Workers = new List<BlockingCollection<Job>>();
         public Channels Channels { get; }
-        public IConnectionProvider ConnectionProvider { get; }
         public IConfiguration Configuration { get; }
         public ILogger<WorkerManager> Logger { get; }
         public ILoggerFactory LoggerFactory { get; }
 
         private CancellationTokenSource ThreadSource = new CancellationTokenSource();
 
-        public WorkerManager(Channels channels, IConnectionProvider connectionProvider, IConfiguration configuration, ILogger<WorkerManager> logger, ILoggerFactory loggerFactory)
+        public WorkerManager(Channels channels, IConfiguration configuration, ILogger<WorkerManager> logger, ILoggerFactory loggerFactory)
         {
             Channels = channels ?? throw new ArgumentNullException(nameof(channels));
-            ConnectionProvider = connectionProvider ?? throw new ArgumentNullException(nameof(connectionProvider));
             Configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
             Logger = logger ?? throw new ArgumentNullException(nameof(logger));
             LoggerFactory = loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory));
@@ -122,7 +120,7 @@ namespace dcrpt_miner
 
                 if (job.Type == JobType.NEW) {
                     Console.ForegroundColor = ConsoleColor.DarkYellow;
-                    Console.WriteLine("{0:T}: New {1} (diff {2})", DateTime.Now, ConnectionProvider.JobName, job.Difficulty);
+                    Console.WriteLine("{0:T}: New {1} (diff {2})", DateTime.Now, job.Name, job.Difficulty);
                     Console.ResetColor();
                 }
 

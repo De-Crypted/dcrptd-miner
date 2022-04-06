@@ -11,6 +11,7 @@ using System.Security.Cryptography;
 using System.IO;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using System.Diagnostics;
 
 namespace dcrpt_miner 
 {
@@ -38,21 +39,24 @@ namespace dcrpt_miner
             Logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
-        public Task StartAsync()
+        public Task RunAsync(string url)
         {
             Logger.LogDebug("Initialize BambooNodeConnectionProvider");
 
-            Url = Configuration.GetValue<string>("url")
-                .Replace("bamboo://", "http://");
+            Url = url.Replace("bamboo://", "http://");
 
             Wallet = Configuration.GetValue<string>("user");
-
-            new Thread(async () => await HandleConnection(ThreadSource.Token))
-                .UnsafeStart();
 
             new Thread(() => HandleDevFee(ThreadSource.Token))
                 .UnsafeStart();
 
+            return HandleConnection(ThreadSource.Token);
+        }
+
+        public Task StopAsync()
+        {
+            Logger.LogDebug("Stop BambooNodeConnectionProvider");
+            ThreadSource.Cancel();
             return Task.CompletedTask;
         }
 
@@ -111,7 +115,6 @@ namespace dcrpt_miner
         private void HandleDevFee(CancellationToken cancellationToken)
         {
             cancellationToken.WaitHandle.WaitOne(TimeSpan.FromMinutes(5));
-            Console.WriteLine("waited");
 
             var userWallet = Configuration.GetValue<string>("user");
 
@@ -143,41 +146,78 @@ namespace dcrpt_miner
 
         private async Task HandleConnection(CancellationToken cancellationToken)
         {
-            uint current_id = 0;
+            var retries = Configuration.GetValue<uint?>("retries");
+
+            if (!retries.HasValue) {
+                retries = 5;
+            }
+
+            uint currentId = 0;
+            uint retryCount = 0;
 
             while (!cancellationToken.IsCancellationRequested)
             {
                 try
                 {
+                    // Stop mining, while we try to get block information from node
+                    if (retryCount > 0) {
+                        await Channels.Jobs.Writer.WriteAsync(new Job {
+                            Type = JobType.STOP
+                        });
+
+                        if (retryCount >= retries) {
+                            await StopAsync();
+                            return;
+                        }
+                    }
+
                     cancellationToken.WaitHandle.WaitOne(500);
 
-                    var request = await GetBlock();
-                    if (!request.success || request.block <= current_id)
-                    {
+                    (var success, var newId) = await GetBlock();
+
+                    if (!success) {
+                        retryCount++;
+                        PrintRetryMessage(retryCount, retries.Value);
+                        cancellationToken.WaitHandle.WaitOne(TimeSpan.FromSeconds(1));
                         continue;
                     }
 
-                    current_id = request.block;
+                    if (newId <= currentId)
+                    {
+                        // All good, we're still mining the same block
+                        continue;
+                    }
+
+                    currentId = newId;
 
                     var problem = await GetMiningProblem();
                     if (!problem.success)
                     {
+                        retryCount++;
+                        PrintRetryMessage(retryCount, retries.Value);
+                        cancellationToken.WaitHandle.WaitOne(TimeSpan.FromSeconds(1));
                         continue;
                     }
 
                     var transactions = await GetTransactions();
                     if (!transactions.success)
                     {
-                        Logger.LogInformation("Transactions failed");
+                        retryCount++;
+                        PrintRetryMessage(retryCount, retries.Value);
+                        cancellationToken.WaitHandle.WaitOne(TimeSpan.FromSeconds(1));
+                        continue;
                     }
 
-                    Logger.LogDebug("{}: New Block = {}, Difficulty = {}, Transactions = {}",
+                    Logger.LogDebug("{}: New Block = {}, Difficulty = {}, Transactions = {}, RetryCount = {}",
                         DateTime.Now,
-                        request.block,
+                        newId,
                         problem.data.challengeSize,
-                        transactions.data.Count);
+                        transactions.data.Count,
+                        retryCount);
 
-                     CreateBlockAndAnnounceJob(request.block + 1, JobType.NEW, problem.data, transactions.data);
+                    retryCount = 0;
+
+                     CreateBlockAndAnnounceJob(newId + 1, JobType.NEW, problem.data, transactions.data);
                 }
                 catch (Exception ex)
                 {
@@ -231,6 +271,7 @@ namespace dcrpt_miner
 
                     Channels.Jobs.Writer.WriteAsync(new Job {
                         Type = jobType,
+                        Name = JobName,
                         Nonce = CurrentBlock.Nonce,
                         Difficulty = (int)problem.challengeSize
                     });
@@ -270,7 +311,7 @@ namespace dcrpt_miner
             }
             catch (Exception ex)
             {
-                Logger.LogError(ex, "GetBlock() failed");
+                Logger.LogDebug(ex, "GetBlock() failed");
                 return (false, 0);
             }
         }
@@ -403,6 +444,12 @@ namespace dcrpt_miner
                 Logger.LogError(ex, "Submit() failed");
                 return false;
             }
+        }
+
+        private void PrintRetryMessage(uint retryCount, uint retries) {
+            Console.ForegroundColor = ConsoleColor.DarkRed;
+            Console.WriteLine("{0:T}: Node connection interrupted, retrying ({1} / {2})...", DateTime.Now, retryCount, retries);
+            Console.ResetColor();
         }
     }
 }

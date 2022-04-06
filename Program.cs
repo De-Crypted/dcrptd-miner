@@ -48,8 +48,13 @@ namespace dcrpt_miner
 
         private static void ConfigureServices(IServiceCollection services)
         {
-            services.AddConnectionProvider();
+            services.AddHttpClient();
+            
+            services.AddSingleton<DcrptConnectionProvider>();
+            services.AddSingleton<ShifuPoolConnectionProvider>();
+            services.AddSingleton<BambooNodeConnectionProvider>();
             services.AddSingleton<Channels>();
+
             services.AddHostedService<WorkerManager>();
             services.AddHostedService<ConnectionManager>();
             services.AddHostedService<StatusManager>();
