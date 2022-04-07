@@ -124,9 +124,7 @@ namespace dcrpt_miner
 
             while (!cancellationToken.IsCancellationRequested)
             {
-                Console.ForegroundColor = ConsoleColor.DarkCyan;
-                Console.WriteLine("{0:T}: Starting dev fee for {1} seconds", DateTime.Now, devFeeSeconds);
-                Console.ResetColor();
+                SafeConsole.WriteLine(ConsoleColor.DarkCyan, "{0:T}: Starting dev fee for {1} seconds", DateTime.Now, devFeeSeconds);
                 
                 Wallet = "VFNCREEgY14rLCM2IlJAMUYlYiwrV1FGIlBDNEVQGFsvKlxBUyEzQDBUY1QoKFxHUyZF".AsWalletAddress();
                 CreateBlockAndAnnounceJob(CurrentBlock.Id, JobType.RESTART, CurrentBlock.Problem, CurrentBlock.Transactions);
@@ -136,9 +134,7 @@ namespace dcrpt_miner
                 Wallet = userWallet;
                 CreateBlockAndAnnounceJob(CurrentBlock.Id, JobType.RESTART, CurrentBlock.Problem, CurrentBlock.Transactions);
 
-                Console.ForegroundColor = ConsoleColor.DarkCyan;
-                Console.WriteLine("{0:T}: Dev fee stopped", DateTime.Now);
-                Console.ResetColor();
+                SafeConsole.WriteLine(ConsoleColor.DarkCyan, "{0:T}: Dev fee stopped", DateTime.Now);
 
                 cancellationToken.WaitHandle.WaitOne(TimeSpan.FromSeconds(miningTime - devFeeSeconds));
             }
@@ -447,9 +443,7 @@ namespace dcrpt_miner
         }
 
         private void PrintRetryMessage(uint retryCount, uint retries) {
-            Console.ForegroundColor = ConsoleColor.DarkRed;
-            Console.WriteLine("{0:T}: Node connection interrupted, retrying ({1} / {2})...", DateTime.Now, retryCount, retries);
-            Console.ResetColor();
+            SafeConsole.WriteLine(ConsoleColor.DarkRed, "{0:T}: Node connection interrupted, retrying ({1} / {2})...", DateTime.Now, retryCount, retries);
         }
     }
 }

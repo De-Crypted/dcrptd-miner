@@ -23,11 +23,6 @@ namespace dcrpt_miner
 
     class Program
     {
-        public static int Shares;
-        public static int AcceptedShares;
-        public static int RejectedShares;
-        public static object ConsoleLock = new object();
-
         private static IConfiguration Configuration { get; set; }
 
         static async Task Main(string[] args)

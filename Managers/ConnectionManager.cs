@@ -51,10 +51,7 @@ namespace dcrpt_miner
                 } 
 
                 if (urls.Count == 0) {
-                    Console.ForegroundColor = ConsoleColor.DarkRed;
-                    Console.WriteLine("No url set in config.json or --url argument!");
-                    Console.ResetColor();
-
+                    SafeConsole.WriteLine(ConsoleColor.DarkRed, "No url set in config.json or --url argument!");
                     Process.GetCurrentProcess().Kill();
                     return;
                 }
@@ -64,23 +61,16 @@ namespace dcrpt_miner
 
                 do {
                     foreach (var _url in urls) {
-                        Console.ForegroundColor = ConsoleColor.DarkGray;
-                        Console.WriteLine("{0:T}: Connecting to {1}", DateTime.Now, _url);
-                        Console.ResetColor();
+                        SafeConsole.WriteLine(ConsoleColor.DarkGray, "{0:T}: Connecting to {1}", DateTime.Now, _url);
 
                         CurrentProvider = GetConnectionProvider(_url);
                         await CurrentProvider.RunAsync(_url);
 
-                        Console.ForegroundColor = ConsoleColor.DarkGray;
-                        Console.WriteLine("{0:T}: Disconnected from {1}", DateTime.Now, _url);
-                        Console.ResetColor();
+                        SafeConsole.WriteLine(ConsoleColor.DarkGray, "{0:T}: Disconnected from {1}", DateTime.Now, _url);
                     }
                 } while (keepReconnecting);
 
-                Console.ForegroundColor = ConsoleColor.DarkRed;
-                Console.WriteLine("{0:T}: Miner shutting down...", DateTime.Now);
-                Console.ResetColor();
-
+                SafeConsole.WriteLine(ConsoleColor.DarkRed, "{0:T}: Miner shutting down...", DateTime.Now);
                 Process.GetCurrentProcess().Kill();
             }).UnsafeStart();
 
@@ -103,7 +93,7 @@ namespace dcrpt_miner
                 await foreach(var solution in Channels.Solutions.Reader.ReadAllAsync(cancellationToken)) {
                     try {
                         Logger.LogDebug("Submitting solution (nonce = {})", solution.AsString());
-                        ++Program.Shares;
+                        var shares = Interlocked.Increment(ref StatusManager.Shares);
 
                         sw.Start();
                         var result = await CurrentProvider.SubmitAsync(solution);
@@ -111,32 +101,22 @@ namespace dcrpt_miner
 
                         switch(result) {
                             case SubmitResult.ACCEPTED:
-                                ++Program.AcceptedShares; 
-
-                                Console.ForegroundColor = ConsoleColor.DarkGreen;
-                                Console.WriteLine("{0:T}: {1} #{2} accepted ({3} ms)", DateTime.Now, CurrentProvider.SolutionName, Program.Shares, sw.Elapsed.Milliseconds);
-                                Console.ResetColor();
+                                Interlocked.Increment(ref StatusManager.AcceptedShares);
+                                SafeConsole.WriteLine(ConsoleColor.DarkGreen, "{0:T}: {1} #{2} accepted ({3} ms)", DateTime.Now, CurrentProvider.SolutionName, shares, sw.Elapsed.Milliseconds);
                                 break;
                             case SubmitResult.REJECTED:
-                                ++Program.RejectedShares;
-
-                                Console.ForegroundColor = ConsoleColor.DarkRed;
-                                Console.WriteLine("{0:T}: {1} #{2} rejected ({3} ms)", DateTime.Now, CurrentProvider.SolutionName, Program.Shares, sw.Elapsed.Milliseconds);
-                                Console.ResetColor();
+                                Interlocked.Increment(ref StatusManager.RejectedShares);
+                                SafeConsole.WriteLine(ConsoleColor.DarkRed, "{0:T}: {1} #{2} rejected ({3} ms)", DateTime.Now, CurrentProvider.SolutionName, shares, sw.Elapsed.Milliseconds);
                                 break;
                             case SubmitResult.TIMEOUT:
-                                Console.ForegroundColor = ConsoleColor.DarkRed;
-                                Console.WriteLine("{0:T}: Failed to submit {1} (ERR_ACK_TIMEOUT)", DateTime.Now, CurrentProvider.SolutionName);
-                                Console.ResetColor();
+                                SafeConsole.WriteLine(ConsoleColor.DarkRed, "{0:T}: Failed to submit {1} (ERR_ACK_TIMEOUT)", DateTime.Now, CurrentProvider.SolutionName);
                                 break;
                         }
 
                         sw.Reset();
                         Logger.LogDebug("Submit done");
                     } catch (Exception) {
-                        Console.ForegroundColor = ConsoleColor.DarkRed;
-                        Console.WriteLine("{0:T}: Failed to submit share (ERR_CONN_FAILED)", DateTime.Now);
-                        Console.ResetColor();
+                        SafeConsole.WriteLine(ConsoleColor.DarkRed, "{0:T}: Failed to submit share (ERR_CONN_FAILED)", DateTime.Now);
                     }
                 }
             } catch(System.OperationCanceledException) {

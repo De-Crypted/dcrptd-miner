@@ -331,6 +331,17 @@ namespace dcrpt_miner
                         }
 
                         for (int i = 0; i < count; i++) {
+                            if (job.CancellationToken.IsCancellationRequested) {
+                                var shares = Interlocked.Increment(ref StatusManager.Shares);
+                                Interlocked.Increment(ref StatusManager.DroppedShares);
+
+                                Console.ForegroundColor = ConsoleColor.DarkRed;
+                                Console.WriteLine("{0:T}: Share #{2} dropped", DateTime.Now, shares);
+                                Console.ResetColor();
+
+                                continue;
+                            }
+
                             var solution = new byte[32];
 
                             for (int x = 0; x < 32; x++) {

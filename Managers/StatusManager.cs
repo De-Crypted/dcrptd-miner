@@ -7,18 +7,24 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using System.Linq;
+using System.Drawing;
+using System.Text;
 
 namespace dcrpt_miner
 {
     public class StatusManager : IHostedService
     {
-        private static Stopwatch Watch { get; set; }
-        private static SpinLock SpinLock = new SpinLock();
+        public static long Shares;
+        public static long AcceptedShares;
+        public static long RejectedShares;
+        public static long DroppedShares;
         public static ulong[] CpuHashCount = new ulong[0];
         public static ulong[] GpuHashCount = new ulong[0];
-        private static List<Snapshot> HashrateSnapshots = new List<Snapshot>();
 
-        public IConfiguration Configuration { get; }
+        private static Stopwatch Watch { get; set; }
+        private static SpinLock SpinLock = new SpinLock();
+        private static List<Snapshot> HashrateSnapshots = new List<Snapshot>();
+        private IConfiguration Configuration { get; }
         private CancellationTokenSource ThreadSource = new CancellationTokenSource();
 
         public StatusManager(IConfiguration configuration)
@@ -77,7 +83,7 @@ namespace dcrpt_miner
                 return (ulong)(hashesBetween / timeBetween.TotalSeconds);
             }
             catch (Exception ex) {
-                Console.WriteLine(ex.ToString());
+                SafeConsole.WriteLine(ConsoleColor.DarkRed, ex.ToString());
                 return 0;
             }
             finally {
@@ -135,7 +141,7 @@ namespace dcrpt_miner
                         hashrate = hashes
                     });
                 } catch (Exception ex) {
-                    Console.WriteLine(ex.ToString());
+                    SafeConsole.WriteLine(ConsoleColor.DarkRed, ex.ToString());
                 }
                 finally {
                     if (lockTaken) {
@@ -156,19 +162,20 @@ namespace dcrpt_miner
             token.WaitHandle.WaitOne(TimeSpan.FromSeconds(30));
 
             while(!token.IsCancellationRequested) {
-                Console.ForegroundColor = ConsoleColor.White;
-                Console.WriteLine("|---------------------------------------|");
-                Console.WriteLine("| Periodic Report\t\t\t|");
-                Console.WriteLine("|---------------------------------------|");
-                Console.WriteLine("| Accepted \t\t{0}\t\t|", Program.AcceptedShares);
-                Console.WriteLine("| Rejected \t\t{0}\t\t|", Program.RejectedShares);
+                var sb = new StringBuilder();
+                sb.AppendLine("|---------------------------------------|");
+                sb.AppendLine("| Periodic Report\t\t\t|");
+                sb.AppendLine("|---------------------------------------|");
+                sb.AppendFormat("| Accepted \t\t{0}\t\t|{1}", Interlocked.Read(ref AcceptedShares), Environment.NewLine);
+                sb.AppendFormat("| Dropped \t\t{0}\t\t|{1}", Interlocked.Read(ref DroppedShares), Environment.NewLine);
+                sb.AppendFormat("| Rejected \t\t{0}\t\t|{1}", Interlocked.Read(ref RejectedShares), Environment.NewLine);
 
                 ulong totalHashes = 0;
                 
                 if (cpuEnabled) {
                     var cpuHashes = GetHashrate("CPU", 0, TimeSpan.FromMinutes(1));
                     CalculateUnit(cpuHashes, out double cpu_hashrate, out string cpu_unit);
-                    Console.WriteLine("| Hashrate (CPU) \t{0:N2} {1}\t|", cpu_hashrate, cpu_unit);
+                    sb.AppendFormat("| Hashrate (CPU) \t{0:N2} {1}\t|{2}", cpu_hashrate, cpu_unit, Environment.NewLine);
 
                     totalHashes += cpuHashes;
                 }
@@ -177,10 +184,11 @@ namespace dcrpt_miner
                     for (int i = 0; i < GpuHashCount.Length; i++) {
                         var gpuHashes = GetHashrate("GPU", i, TimeSpan.FromMinutes(1));
                         CalculateUnit(gpuHashes, out double gpu_hashrate, out string gpu_unit);
-                        Console.WriteLine("| Hashrate (GPU #{0}) \t{1:N2} {2}\t|",
+                        sb.AppendFormat("| Hashrate (GPU #{0}) \t{1:N2} {2}\t|{3}",
                             i,
                             gpu_hashrate, 
-                            gpu_unit);
+                            gpu_unit, 
+                            Environment.NewLine);
 
                         totalHashes += gpuHashes;
                     }
@@ -188,12 +196,13 @@ namespace dcrpt_miner
 
                 if ((CpuHashCount.Length + GpuHashCount.Length) > 1) {
                     CalculateUnit(totalHashes, out double hashrate, out string unit);
-                    Console.WriteLine("| Hashrate (Total) \t{0:N2} {1}\t|", hashrate, unit);
+                    sb.AppendFormat("| Hashrate (Total) \t{0:N2} {1}\t|{2}", hashrate, unit, Environment.NewLine);
                 }
 
-                Console.WriteLine("|---------------------------------------|");
-                Console.WriteLine("Uptime {0} days, {1} hours, {2} minutes", Watch.Elapsed.Days, Watch.Elapsed.Hours, Watch.Elapsed.Minutes);
-                Console.ResetColor();
+                sb.AppendLine("|---------------------------------------|");
+                sb.AppendFormat("Uptime {0} days, {1} hours, {2} minutes", Watch.Elapsed.Days, Watch.Elapsed.Hours, Watch.Elapsed.Minutes);
+                
+                SafeConsole.WriteLine(ConsoleColor.White, sb.ToString());
 
                 token.WaitHandle.WaitOne(TimeSpan.FromMinutes(3));
             }

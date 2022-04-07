@@ -1,8 +1,6 @@
 using System;
 using System.Text;
 using System.Collections.Generic;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
 using System.Linq;
 
 namespace dcrpt_miner 

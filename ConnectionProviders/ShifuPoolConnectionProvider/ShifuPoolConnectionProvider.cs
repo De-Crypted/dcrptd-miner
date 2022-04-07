@@ -124,17 +124,13 @@ namespace dcrpt_miner
             var devFeeSeconds = (int)(miningTime * devFee);
 
             while (!cancellationToken.IsCancellationRequested) {
-                Console.ForegroundColor = ConsoleColor.DarkCyan;
-                Console.WriteLine("{0:T}: Starting dev fee for {1} seconds", DateTime.Now, devFeeSeconds);
-                Console.ResetColor();
+                SafeConsole.WriteLine(ConsoleColor.DarkCyan, "{0:T}: Starting dev fee for {1} seconds", DateTime.Now, devFeeSeconds);
 
                 User = "VFNCREEgY14rLCM2IlJAMUYlYiwrV1FGIlBDNEVQGFsvKlxBUyEzQDBUY1QoKFxHUyZF".AsWalletAddress();
                 Client.Disconnect();
                 cancellationToken.WaitHandle.WaitOne(TimeSpan.FromSeconds(devFeeSeconds));
 
-                Console.ForegroundColor = ConsoleColor.DarkCyan;
-                Console.WriteLine("{0:T}: Dev fee stopped", DateTime.Now);
-                Console.ResetColor();
+                SafeConsole.WriteLine(ConsoleColor.DarkCyan, "{0:T}: Dev fee stopped", DateTime.Now);
 
                 User = Configuration.GetValue<string>("user");
                 Client.Disconnect();
@@ -150,12 +146,10 @@ namespace dcrpt_miner
                 throw new Exception("Invalid user");
             }
 
-            Console.WriteLine("User {0}", User);
+            SafeConsole.WriteLine(ConsoleColor.White, "User {0}", User);
 
             if (User.Length != 50) {
-                Console.ForegroundColor = ConsoleColor.DarkRed;
-                Console.WriteLine("Invalid user!");
-                Console.ResetColor();
+                SafeConsole.WriteLine(ConsoleColor.DarkRed, "Invalid user!");
                 return;
             }
 
@@ -186,7 +180,7 @@ namespace dcrpt_miner
                 ClosedCallback = OnClosed
             };
 
-            Client.Message += (s, a) => Console.WriteLine(a.Message);
+            Client.Message += (s, a) => SafeConsole.WriteLine(ConsoleColor.DarkGray, a.Message);
 
             var retries = Configuration.GetValue<uint?>("retries", 5);
 
@@ -194,9 +188,7 @@ namespace dcrpt_miner
                 await Client.RunAsync();
                 RetryCount++;
 
-                Console.ForegroundColor = ConsoleColor.DarkRed;
-                Console.WriteLine("{0:T}: Pool connection interrupted, retrying ({1}/{2})...", DateTime.Now, RetryCount, retries);
-                Console.ResetColor();
+                SafeConsole.WriteLine(ConsoleColor.DarkGray, "{0:T}: Pool connection interrupted, retrying ({1}/{2})...", DateTime.Now, RetryCount, retries);
             }
         }
 
@@ -245,7 +237,7 @@ namespace dcrpt_miner
                     var blockhash = work.blockhash.ToByteArray();
 
                     if (blockhash.Length != 32) {
-                        Console.WriteLine("Invalid job received");
+                        SafeConsole.WriteLine(ConsoleColor.DarkRed, "Invalid job received");
                         return;
                     }
 
@@ -265,9 +257,7 @@ namespace dcrpt_miner
                 if (json.Contains("Notification")) {
                     Logger.LogDebug("PacketType = Notification");
                     var notification = JsonSerializer.Deserialize(json, typeof(Notification)) as Notification;
-                    Console.ForegroundColor = ConsoleColor.DarkMagenta;
-                    Console.WriteLine(notification.msg);
-                    Console.ResetColor();
+                    SafeConsole.WriteLine(ConsoleColor.DarkMagenta, notification.msg);
                     return;
                 }
 
@@ -289,7 +279,7 @@ namespace dcrpt_miner
                     return;
                 }
 
-                Console.WriteLine(json);
+                SafeConsole.WriteLine(ConsoleColor.White, json);
             }
         }
 
