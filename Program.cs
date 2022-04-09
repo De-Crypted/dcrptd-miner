@@ -37,6 +37,10 @@ namespace dcrpt_miner
                 .ConfigureServices(ConfigureServices)
                 .Build();
 
+            var version = new Version("0.4-beta".Substring(0, Math.Min("0.4-beta".IndexOf("-"), "0.4-beta".Length)));
+            Console.WriteLine(version.ToString());
+            Console.WriteLine(version >= new Version(0, 4));
+
             Console.Title = "dcrptd miner";
             await host.RunAsync();
         }

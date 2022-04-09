@@ -182,8 +182,14 @@ namespace Unclassified.Net
 				{
 					// Try to connect to remote host
 					var connectTimeout = TimeSpan.FromTicks(ConnectTimeout.Ticks + (MaxConnectTimeout.Ticks - ConnectTimeout.Ticks) / 20 * Math.Min(reconnectTry, 20));
-					tcpClient = new TcpClient(AddressFamily.InterNetworkV6);
-					tcpClient.Client.DualMode = true;
+
+                    if(Socket.OSSupportsIPv6) {
+					    tcpClient = new TcpClient(AddressFamily.InterNetworkV6);
+					    tcpClient.Client.DualMode = true;
+                    } else {
+                        tcpClient = new TcpClient(AddressFamily.InterNetwork);
+                    }
+
 					Message?.Invoke(this, new AsyncTcpEventArgs("Connecting to server"));
 					Task connectTask;
 					if (!string.IsNullOrWhiteSpace(HostName))
