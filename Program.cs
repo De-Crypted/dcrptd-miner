@@ -37,12 +37,24 @@ namespace dcrpt_miner
                 .ConfigureServices(ConfigureServices)
                 .Build();
 
-            var version = new Version("0.4-beta".Substring(0, Math.Min("0.4-beta".IndexOf("-"), "0.4-beta".Length)));
-            Console.WriteLine(version.ToString());
-            Console.WriteLine(version >= new Version(0, 4));
-
             Console.Title = "dcrptd miner";
-            await host.RunAsync();
+            await host.StartAsync();
+
+            Console.TreatControlCAsInput = true;
+            while (true) {
+                var key = Console.ReadKey(true);
+
+                switch (key.Key) {
+                    case ConsoleKey.C:
+                        if (key.Modifiers == ConsoleModifiers.Control)  {
+                            Process.GetCurrentProcess().Kill();
+                        }
+                    break;
+                    case ConsoleKey.S:
+                        StatusManager.DoPeriodicReport();
+                    break;
+                }
+            }
         }
 
         private static void ConfigureServices(IServiceCollection services)

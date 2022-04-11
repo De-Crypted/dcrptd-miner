@@ -35,8 +35,9 @@ namespace dcrpt_miner
         public Task StartAsync(CancellationToken cancellationToken)
         {
             Watch = new Stopwatch();
+            Watch.Start();
 
-            new Thread(() => ReportProgress(ThreadSource.Token))
+            new Thread(() => PeriodicReportTimer(ThreadSource.Token))
                 .UnsafeStart();
             new Thread(() => CollectHashrate(ThreadSource.Token))
                 .UnsafeStart();
@@ -74,7 +75,11 @@ namespace dcrpt_miner
                 }
 
                 if (snapshot == null) {
-                    return 0;
+                    snapshot = new Snapshot
+                    {
+                        timestamp = DateTime.Now.AddMilliseconds(Watch.ElapsedMilliseconds * -1),
+                        hashrate = 0
+                    };
                 }
 
                 var timeBetween = latest.timestamp - snapshot.timestamp;
@@ -93,122 +98,131 @@ namespace dcrpt_miner
             }
         }
 
+        public static void DoPeriodicReport() 
+        {
+            CollectHashrateSnapshot();
+
+            var sb = new StringBuilder();
+            sb.AppendLine("|---------------------------------------|");
+            sb.AppendLine("| Periodic Report\t\t\t|");
+            sb.AppendLine("|---------------------------------------|");
+            sb.AppendFormat("| Accepted \t\t{0}\t\t|{1}", Interlocked.Read(ref AcceptedShares), Environment.NewLine);
+            sb.AppendFormat("| Dropped \t\t{0}\t\t|{1}", Interlocked.Read(ref DroppedShares), Environment.NewLine);
+            sb.AppendFormat("| Rejected \t\t{0}\t\t|{1}", Interlocked.Read(ref RejectedShares), Environment.NewLine);
+
+            ulong totalHashes = 0;
+            
+            if (CpuHashCount.Length > 0) {
+                var cpuHashes = GetHashrate("CPU", 0, TimeSpan.FromMinutes(1));
+                CalculateUnit(cpuHashes, out double cpu_hashrate, out string cpu_unit);
+                sb.AppendFormat("| Hashrate (CPU) \t{0:N2} {1}\t|{2}", cpu_hashrate, cpu_unit, Environment.NewLine);
+
+                totalHashes += cpuHashes;
+            }
+
+            if (GpuHashCount.Length > 0) {
+                for (int i = 0; i < GpuHashCount.Length; i++) {
+                    var gpuHashes = GetHashrate("GPU", i, TimeSpan.FromMinutes(1));
+                    CalculateUnit(gpuHashes, out double gpu_hashrate, out string gpu_unit);
+                    sb.AppendFormat("| Hashrate (GPU #{0}) \t{1:N2} {2}\t|{3}",
+                        i,
+                        gpu_hashrate, 
+                        gpu_unit, 
+                        Environment.NewLine);
+
+                    totalHashes += gpuHashes;
+                }
+            }
+
+            if ((CpuHashCount.Length + GpuHashCount.Length) > 1) {
+                CalculateUnit(totalHashes, out double hashrate, out string unit);
+                sb.AppendFormat("| Hashrate (Total) \t{0:N2} {1}\t|{2}", hashrate, unit, Environment.NewLine);
+            }
+
+            sb.AppendLine("|---------------------------------------|");
+            sb.AppendFormat("Uptime {0} days, {1} hours, {2} minutes", Watch.Elapsed.Days, Watch.Elapsed.Hours, Watch.Elapsed.Minutes);
+            
+            SafeConsole.WriteLine(ConsoleColor.White, sb.ToString());
+        }
+
+        private static void CollectHashrateSnapshot()
+        {
+            bool lockTaken = false;
+            try {
+                SpinLock.Enter(ref lockTaken);
+                ulong hashes = 0;
+
+                // keep only snapshots from past 10 minutes
+                var expiredAt = DateTime.Now.AddMinutes(-10);
+                HashrateSnapshots.RemoveAll(p => p.timestamp <= expiredAt);
+
+                if (CpuHashCount.Length > 0) {
+                    for (int i = 0; i < CpuHashCount.Length; i++) {
+                        hashes += CpuHashCount[i];
+                    }
+
+                    HashrateSnapshots.Add(new Snapshot {
+                        timestamp = DateTime.Now,
+                        type = "CPU",
+                        id = 0,
+                        hashrate = hashes
+                    });
+                }
+
+                if (GpuHashCount.Length > 0) {
+                    for (int i = 0; i < GpuHashCount.Length; i++) {
+                        HashrateSnapshots.Add(new Snapshot {
+                            timestamp = DateTime.Now,
+                            type = "GPU",
+                            id = i,
+                            hashrate = GpuHashCount[i]
+                        });
+
+                        hashes += GpuHashCount[i];
+                    }
+                }
+
+                HashrateSnapshots.Add(new Snapshot {
+                    timestamp = DateTime.Now,
+                    type = "TOTAL",
+                    id = 0,
+                    hashrate = hashes
+                });
+            } catch (Exception ex) {
+                SafeConsole.WriteLine(ConsoleColor.DarkRed, ex.ToString());
+            }
+            finally {
+                if (lockTaken) {
+                    SpinLock.Exit(false);
+                }
+            }
+        }
+
         private void CollectHashrate(CancellationToken token)
         {
             var gpuEnabled = Configuration.GetValue<bool>("gpu:enabled");
             var cpuEnabled = Configuration.GetValue<bool>("cpu:enabled");
 
             while(!token.IsCancellationRequested) {
-                bool lockTaken = false;
-                try {
-                    SpinLock.Enter(ref lockTaken);
-                    ulong hashes = 0;
-
-                    // keep only snapshots from past 10 minutes
-                    var expiredAt = DateTime.Now.AddMinutes(-10);
-                    HashrateSnapshots.RemoveAll(p => p.timestamp <= expiredAt);
-
-                    if (cpuEnabled) {
-                        for (int i = 0; i < CpuHashCount.Length; i++) {
-                            hashes += CpuHashCount[i];
-                        }
-
-                        HashrateSnapshots.Add(new Snapshot {
-                            timestamp = DateTime.Now,
-                            type = "CPU",
-                            id = 0,
-                            hashrate = hashes
-                        });
-                    }
-
-                    if (gpuEnabled) {
-                        for (int i = 0; i < GpuHashCount.Length; i++) {
-                            HashrateSnapshots.Add(new Snapshot {
-                                timestamp = DateTime.Now,
-                                type = "GPU",
-                                id = i,
-                                hashrate = GpuHashCount[i]
-                            });
-
-                            hashes += GpuHashCount[i];
-                        }
-                    }
-
-                    HashrateSnapshots.Add(new Snapshot {
-                        timestamp = DateTime.Now,
-                        type = "TOTAL",
-                        id = 0,
-                        hashrate = hashes
-                    });
-                } catch (Exception ex) {
-                    SafeConsole.WriteLine(ConsoleColor.DarkRed, ex.ToString());
-                }
-                finally {
-                    if (lockTaken) {
-                        SpinLock.Exit(false);
-                    }
-                }
-
+                CollectHashrateSnapshot();
                 token.WaitHandle.WaitOne(TimeSpan.FromSeconds(10));
             }
         }
 
-        private void ReportProgress(CancellationToken token)
+        private void PeriodicReportTimer(CancellationToken token)
         {
-            var gpuEnabled = Configuration.GetValue<bool>("gpu:enabled");
-            var cpuEnabled = Configuration.GetValue<bool>("cpu:enabled");
+            var delay = Configuration.GetValue<int>("periodic_report:initial_delay", 30);
+            var interval = Configuration.GetValue<int>("periodic_report:report_interval", 180);
 
-            Watch.Start();
-            token.WaitHandle.WaitOne(TimeSpan.FromSeconds(30));
+            token.WaitHandle.WaitOne(TimeSpan.FromSeconds(delay));
 
             while(!token.IsCancellationRequested) {
-                var sb = new StringBuilder();
-                sb.AppendLine("|---------------------------------------|");
-                sb.AppendLine("| Periodic Report\t\t\t|");
-                sb.AppendLine("|---------------------------------------|");
-                sb.AppendFormat("| Accepted \t\t{0}\t\t|{1}", Interlocked.Read(ref AcceptedShares), Environment.NewLine);
-                sb.AppendFormat("| Dropped \t\t{0}\t\t|{1}", Interlocked.Read(ref DroppedShares), Environment.NewLine);
-                sb.AppendFormat("| Rejected \t\t{0}\t\t|{1}", Interlocked.Read(ref RejectedShares), Environment.NewLine);
-
-                ulong totalHashes = 0;
-                
-                if (cpuEnabled) {
-                    var cpuHashes = GetHashrate("CPU", 0, TimeSpan.FromMinutes(1));
-                    CalculateUnit(cpuHashes, out double cpu_hashrate, out string cpu_unit);
-                    sb.AppendFormat("| Hashrate (CPU) \t{0:N2} {1}\t|{2}", cpu_hashrate, cpu_unit, Environment.NewLine);
-
-                    totalHashes += cpuHashes;
-                }
-
-                if (gpuEnabled) {
-                    for (int i = 0; i < GpuHashCount.Length; i++) {
-                        var gpuHashes = GetHashrate("GPU", i, TimeSpan.FromMinutes(1));
-                        CalculateUnit(gpuHashes, out double gpu_hashrate, out string gpu_unit);
-                        sb.AppendFormat("| Hashrate (GPU #{0}) \t{1:N2} {2}\t|{3}",
-                            i,
-                            gpu_hashrate, 
-                            gpu_unit, 
-                            Environment.NewLine);
-
-                        totalHashes += gpuHashes;
-                    }
-                }
-
-                if ((CpuHashCount.Length + GpuHashCount.Length) > 1) {
-                    CalculateUnit(totalHashes, out double hashrate, out string unit);
-                    sb.AppendFormat("| Hashrate (Total) \t{0:N2} {1}\t|{2}", hashrate, unit, Environment.NewLine);
-                }
-
-                sb.AppendLine("|---------------------------------------|");
-                sb.AppendFormat("Uptime {0} days, {1} hours, {2} minutes", Watch.Elapsed.Days, Watch.Elapsed.Hours, Watch.Elapsed.Minutes);
-                
-                SafeConsole.WriteLine(ConsoleColor.White, sb.ToString());
-
-                token.WaitHandle.WaitOne(TimeSpan.FromMinutes(3));
+                DoPeriodicReport();
+                token.WaitHandle.WaitOne(TimeSpan.FromSeconds(interval));
             }
         }
 
-        private void CalculateUnit(double hashrate, out double adjusted_hashrate, out string unit) {
+        private static void CalculateUnit(double hashrate, out double adjusted_hashrate, out string unit) {
             if (hashrate > 1000000000000) {
                 adjusted_hashrate = hashrate / 1000000000000;
                 unit = "TH/s";
@@ -237,7 +251,7 @@ namespace dcrpt_miner
             unit = "H/s";
         }
 
-        private class Snapshot {
+        public class Snapshot {
             public DateTime timestamp { get; set; }
             public String type { get; set; }
             public int id { get; set; }
