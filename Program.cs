@@ -53,6 +53,12 @@ namespace dcrpt_miner
                     case ConsoleKey.S:
                         StatusManager.DoPeriodicReport();
                     break;
+                    case ConsoleKey.P:
+                        WorkerManager.PauseWorkers();
+                    break;
+                    case ConsoleKey.R:
+                        WorkerManager.ResumeWorkers();
+                    break;
                 }
             }
         }

@@ -17,7 +17,7 @@ namespace dcrpt_miner
     {
         private static RandomNumberGenerator _global = RandomNumberGenerator.Create();
 
-        public static unsafe void DoWork(uint id, BlockingCollection<Job> queue, Channels channels, CancellationToken token)
+        public static unsafe void DoWork(uint id, BlockingCollection<Job> queue, Channels channels, ManualResetEvent pauseEvent, CancellationToken token)
         {
             byte[] buffer = new byte[4];
             _global.GetBytes(buffer);
@@ -61,6 +61,8 @@ namespace dcrpt_miner
                                 // Be nice to other threads and processes
                                 Thread.Sleep(1);
                             }
+
+                            pauseEvent.WaitOne();
                         }
 
                         --count;

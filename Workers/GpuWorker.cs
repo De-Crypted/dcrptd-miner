@@ -148,7 +148,7 @@ namespace dcrpt_miner
             error.ThrowIfError();
         }
 
-        public static void DoWork(uint id, GpuDevice device, BlockingCollection<Job> queue, Channels channels, IConfiguration configuration, ILogger logger, CancellationToken token)
+        public static void DoWork(uint id, GpuDevice device, BlockingCollection<Job> queue, Channels channels, ManualResetEvent pauseEvent, IConfiguration configuration, ILogger logger, CancellationToken token)
         {
            ClErrorCode error;
 
@@ -369,6 +369,8 @@ namespace dcrpt_miner
                     Cl.clReleaseEvent(ev);
 
                     StatusManager.GpuHashCount[id] += (ulong)maxGlobalSize * (ulong)maxGlobalSize1 * (ulong)workSize;
+
+                    pauseEvent.WaitOne();
                 }
 
                 GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced);

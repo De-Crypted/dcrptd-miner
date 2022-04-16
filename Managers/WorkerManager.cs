@@ -22,6 +22,7 @@ namespace dcrpt_miner
         public ILogger<WorkerManager> Logger { get; }
         public ILoggerFactory LoggerFactory { get; }
 
+        private static ManualResetEvent PauseEvent = new ManualResetEvent(true);
         private CancellationTokenSource ThreadSource = new CancellationTokenSource();
 
         public WorkerManager(Channels channels, IConfiguration configuration, ILogger<WorkerManager> logger, ILoggerFactory loggerFactory)
@@ -30,6 +31,18 @@ namespace dcrpt_miner
             Configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
             Logger = logger ?? throw new ArgumentNullException(nameof(logger));
             LoggerFactory = loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory));
+        }
+
+        public static void PauseWorkers()
+        {
+            PauseEvent.Reset();
+            SafeConsole.WriteLine(ConsoleColor.DarkGray, "{0:T}: Paused, press 'r' to resume mining", DateTime.Now);
+        }
+
+        public static void ResumeWorkers()
+        {
+            PauseEvent.Set();
+            SafeConsole.WriteLine(ConsoleColor.DarkGray, "{0:T}: Mining resumed", DateTime.Now);
         }
 
         public Task StartAsync(CancellationToken cancellationToken) 
@@ -66,11 +79,11 @@ namespace dcrpt_miner
                 StatusManager.CpuHashCount = new ulong[threads];
 
                 for (uint i = 0; i < threads; i++) {
-                    var queue = new BlockingCollection<Job>(1);
+                    var queue = new BlockingCollection<Job>();
 
                     var tid = i;
                     Logger.LogDebug("Starting CpuWorker[{}] thread", tid);
-                    new Thread(() => CpuWorker.DoWork(tid, queue, Channels, ThreadSource.Token))
+                    new Thread(() => CpuWorker.DoWork(tid, queue, Channels, PauseEvent, ThreadSource.Token))
                         .UnsafeStart();
 
                     Workers.Add(queue); 
@@ -89,7 +102,7 @@ namespace dcrpt_miner
                 StatusManager.GpuHashCount = new ulong[selectedGpus.Length];
 
                 for (uint i = 0; i < selectedGpus.Length; i++) {
-                    var queue = new BlockingCollection<Job>(1);
+                    var queue = new BlockingCollection<Job>();
                     
                     var byId = int.TryParse(selectedGpus[i], out var deviceId);
                     var gpu = byId ? gpuDevices.Find(g => g.Id == deviceId) : gpuDevices.Find(g => g.DeviceName == selectedGpus[i]);
@@ -100,7 +113,7 @@ namespace dcrpt_miner
 
                     var tid = i;
                     Logger.LogDebug("Starting GpuWorker[{}] thread for gpu id: {}, name: {}", tid, gpu.Id, gpu.DeviceName);
-                    new Thread(() => GpuWorker.DoWork(tid, gpu, queue, Channels, Configuration, LoggerFactory.CreateLogger<GpuWorker>(), ThreadSource.Token))
+                    new Thread(() => GpuWorker.DoWork(tid, gpu, queue, Channels, PauseEvent, Configuration, LoggerFactory.CreateLogger<GpuWorker>(), ThreadSource.Token))
                         .UnsafeStart();
 
                     Workers.Add(queue);
