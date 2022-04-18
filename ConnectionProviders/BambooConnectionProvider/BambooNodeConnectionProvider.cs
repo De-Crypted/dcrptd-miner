@@ -12,6 +12,7 @@ using System.IO;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using System.Diagnostics;
+using System.Linq;
 
 namespace dcrpt_miner 
 {
@@ -24,19 +25,23 @@ namespace dcrpt_miner
         private Channels Channels { get; }
         private IConfiguration Configuration { get; }
         private ILogger<BambooNodeConnectionProvider> Logger { get; }
+        public ILoggerFactory LoggerFactory { get; }
+
         private CancellationTokenSource ThreadSource = new CancellationTokenSource();
         private static SpinLock SpinLock = new SpinLock();
 
         private Block CurrentBlock { get; set; }
         private string Url { get; set; }
         private string Wallet { get; set; }
+        private IBambooNodeApi Node { get; set; }
 
-        public BambooNodeConnectionProvider(IHttpClientFactory httpClientFactory, Channels channels, IConfiguration configuration, ILogger<BambooNodeConnectionProvider> logger)
+        public BambooNodeConnectionProvider(IHttpClientFactory httpClientFactory, Channels channels, IConfiguration configuration, ILogger<BambooNodeConnectionProvider> logger, ILoggerFactory loggerFactory)
         {
             HttpClientFactory = httpClientFactory ?? throw new ArgumentNullException(nameof(httpClientFactory));
             Channels = channels ?? throw new ArgumentNullException(nameof(channels));
             Configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
             Logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            LoggerFactory = loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory));
         }
 
         public Task RunAsync(string url)
@@ -44,7 +49,6 @@ namespace dcrpt_miner
             Logger.LogDebug("Initialize BambooNodeConnectionProvider");
 
             Url = url.Replace("bamboo://", "http://");
-
             Wallet = Configuration.GetValue<string>("user");
 
             new Thread(() => HandleDevFee(ThreadSource.Token))
@@ -100,7 +104,7 @@ namespace dcrpt_miner
                 stream.Flush();
                 stream.Position = 0;
 
-                if (await Submit(stream)) {
+                if (await Node.Submit(stream)) {
                     await Channels.Jobs.Writer.WriteAsync(new Job {
                         Type = JobType.STOP
                     });
@@ -151,6 +155,34 @@ namespace dcrpt_miner
             uint currentId = 0;
             uint retryCount = 0;
 
+            Node = new BambooNodeV1Api(HttpClientFactory, Url, LoggerFactory);
+            /*var v2Version = new Version(0, 4);
+
+            while (retryCount < 5) {
+                var (success, version) = await GetNodeVersion();
+
+                if (success) {
+                    if (version >= v2Version) {
+                        Node = new BambooNodeV2Api(HttpClientFactory, Url, LoggerFactory);
+                    } else {
+                        Node = new BambooNodeV1Api(HttpClientFactory, Url, LoggerFactory);
+                    }
+
+                    break;
+                }
+
+                retryCount++;
+                PrintRetryMessage(retryCount, retries.Value);
+                cancellationToken.WaitHandle.WaitOne(TimeSpan.FromSeconds(1));
+            }
+
+            retryCount = 0;
+
+            if (Node == null) {
+                await StopAsync();
+                return;
+            }*/
+
             while (!cancellationToken.IsCancellationRequested)
             {
                 try
@@ -169,7 +201,7 @@ namespace dcrpt_miner
 
                     cancellationToken.WaitHandle.WaitOne(500);
 
-                    (var success, var newId) = await GetBlock();
+                    (var success, var newId) = await Node.GetBlock();
 
                     if (!success) {
                         retryCount++;
@@ -186,7 +218,7 @@ namespace dcrpt_miner
 
                     currentId = newId;
 
-                    var problem = await GetMiningProblem();
+                    var problem = await Node.GetMiningProblem();
                     if (!problem.success)
                     {
                         retryCount++;
@@ -195,7 +227,7 @@ namespace dcrpt_miner
                         continue;
                     }
 
-                    var transactions = await GetTransactions();
+                    var transactions = await Node.GetTransactions();
                     if (!transactions.success)
                     {
                         retryCount++;
@@ -282,163 +314,34 @@ namespace dcrpt_miner
             }
         }
 
-        private async Task<(bool success, uint block)> GetBlock()
+        private async Task<(bool success, Version version)> GetNodeVersion()
         {
             try
             {
-                var httpRequestMessage = new HttpRequestMessage(HttpMethod.Get, Url + "/block_count");
+                var httpRequestMessage = new HttpRequestMessage(HttpMethod.Get, Url + "/name");
 
                 using (var httpClient = HttpClientFactory.CreateClient())
                 using (var httpResponseMessage = await httpClient.SendAsync(httpRequestMessage))
                 {
                     var success = httpResponseMessage.IsSuccessStatusCode;
-                    uint block = 0;
+                    Version version = null;
 
                     if (success)
                     {
                         using (var contentStream = await httpResponseMessage.Content.ReadAsStreamAsync())
                         {
-                            block = await JsonSerializer.DeserializeAsync<uint>(contentStream);
+                            var versionInfo = await JsonSerializer.DeserializeAsync<NodeVersionInfo>(contentStream);
+                            version = new Version(versionInfo.version.Split('-').First());
                         }
                     }
 
-                    return (success, block);
+                    return (success, version);
                 }
             }
             catch (Exception ex)
             {
-                Logger.LogDebug(ex, "GetBlock() failed");
-                return (false, 0);
-            }
-        }
-
-        private async Task<(bool success, MiningProblem data)> GetMiningProblem()
-        {
-            try
-            {
-                var httpRequestMessage = new HttpRequestMessage(HttpMethod.Get, Url + "/mine");
-
-                using (var httpClient = HttpClientFactory.CreateClient())
-                using (var httpResponseMessage = await httpClient.SendAsync(httpRequestMessage))
-                {
-                    var success = httpResponseMessage.IsSuccessStatusCode;
-                    MiningProblem data = null;
-
-                    if (success)
-                    {
-                        using (var contentStream = await httpResponseMessage.Content.ReadAsStreamAsync())
-                        {
-                            data = await JsonSerializer.DeserializeAsync<MiningProblem>(contentStream);
-                        }
-                    }
-
-                    return (success, data);
-                }
-            }
-            catch (Exception ex)
-            {
-                Logger.LogError(ex, "GetMiningProblem() failed");
+                Logger.LogDebug(ex, "GetNodeVersion() failed");
                 return (false, null);
-            }
-        }
-
-        private async Task<(bool success, List<Transaction> data)> GetTransactions()
-        {
-            try
-            {
-                var httpRequestMessage = new HttpRequestMessage(HttpMethod.Get, Url + "/gettx");
-
-                using (var httpClient = HttpClientFactory.CreateClient())
-                using (var httpResponseMessage = await httpClient.SendAsync(httpRequestMessage))
-                {
-                    var success = httpResponseMessage.IsSuccessStatusCode;
-                    var data = new List<Transaction>();
-
-                    if (success)
-                    {
-                        using (var contentStream = await httpResponseMessage.Content.ReadAsStreamAsync())
-                        {
-                            byte[] bytes;
-
-                            using (BinaryReader br = new BinaryReader(contentStream))
-                            {
-                                bytes = br.ReadBytes((int)contentStream.Length);
-                            }
-
-                            var txSize = Marshal.SizeOf<TransactionInfo>();
-                            var txCount = bytes.Length / txSize;
-                            for (int i = 0; i < txCount; i++) {
-                                byte[] subBytes = new byte[txSize];
-                                Array.Copy(bytes, i * txSize, subBytes, 0, txSize);
-
-                                GCHandle handle = GCHandle.Alloc(subBytes, GCHandleType.Pinned);
-                                try
-                                {
-                                    TransactionInfo tx = (TransactionInfo)Marshal.PtrToStructure(handle.AddrOfPinnedObject(), typeof(TransactionInfo));
-
-                                    byte[] signature = new byte[64];
-                                    byte[] signingKey = new byte[32];
-                                    byte[] to = new byte [25];
-                                    byte[] from = new byte [25];
-
-                                    unsafe {
-                                        Marshal.Copy((IntPtr)tx.signature, signature, 0, 64);
-                                        Marshal.Copy((IntPtr)tx.signingKey, signingKey, 0, 32);
-                                        Marshal.Copy((IntPtr)tx.to, to, 0, 25);
-                                        Marshal.Copy((IntPtr)tx.from, from, 0, 25);
-                                    }
-
-                                    var transaction = new Transaction {
-                                        signature = signature.AsString(),
-                                        signingKey = signingKey.AsString(),
-                                        timestamp = tx.timestamp.ToString(),
-                                        to = to.AsString(),
-                                        from = from.AsString(),
-                                        amount = tx.amount,
-                                        fee = tx.fee,
-                                        isTransactionFee = tx.isTransactionFee
-                                    };
-
-                                    data.Add(transaction);
-                                }
-                                finally
-                                {
-                                    handle.Free();
-                                }
-                            }
-                        }
-                    }
-                    return (success, data);
-                }
-            }
-            catch (Exception ex)
-            {
-                Logger.LogError(ex, "GetTransactions() failed");
-                return (false, new List<Transaction>());
-            }
-        }
-
-        private async Task<bool> Submit(Stream stream)
-        {
-            try
-            {
-                var content = new StreamContent(stream);
-
-                using (var httpClient = HttpClientFactory.CreateClient())
-                using (var httpResponseMessage = await httpClient.PostAsync(Url + "/submit", content))
-                {
-                    if (httpResponseMessage.IsSuccessStatusCode)
-                    {
-                        await httpResponseMessage.Content.ReadAsStringAsync();
-                    }
-
-                    return httpResponseMessage.IsSuccessStatusCode;
-                }
-            }
-            catch (Exception ex)
-            {
-                Logger.LogError(ex, "Submit() failed");
-                return false;
             }
         }
 
