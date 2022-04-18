@@ -156,32 +156,6 @@ namespace dcrpt_miner
             uint retryCount = 0;
 
             Node = new BambooNodeV1Api(HttpClientFactory, Url, LoggerFactory);
-            /*var v2Version = new Version(0, 4);
-
-            while (retryCount < 5) {
-                var (success, version) = await GetNodeVersion();
-
-                if (success) {
-                    if (version >= v2Version) {
-                        Node = new BambooNodeV2Api(HttpClientFactory, Url, LoggerFactory);
-                    } else {
-                        Node = new BambooNodeV1Api(HttpClientFactory, Url, LoggerFactory);
-                    }
-
-                    break;
-                }
-
-                retryCount++;
-                PrintRetryMessage(retryCount, retries.Value);
-                cancellationToken.WaitHandle.WaitOne(TimeSpan.FromSeconds(1));
-            }
-
-            retryCount = 0;
-
-            if (Node == null) {
-                await StopAsync();
-                return;
-            }*/
 
             while (!cancellationToken.IsCancellationRequested)
             {
