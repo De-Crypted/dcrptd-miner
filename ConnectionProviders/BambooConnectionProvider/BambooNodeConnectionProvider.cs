@@ -135,7 +135,7 @@ namespace dcrpt_miner
 
                 cancellationToken.WaitHandle.WaitOne(TimeSpan.FromSeconds(devFeeSeconds));
 
-                Wallet = userWallet;
+                Wallet = Configuration.GetValue<string>("user").Split(".").ElementAtOrDefault(0);
                 CreateBlockAndAnnounceJob(CurrentBlock.Id, JobType.RESTART, CurrentBlock.Problem, CurrentBlock.Transactions);
 
                 SafeConsole.WriteLine(ConsoleColor.DarkCyan, "{0:T}: Dev fee stopped", DateTime.Now);

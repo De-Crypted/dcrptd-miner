@@ -128,17 +128,15 @@ namespace dcrpt_miner
             while (!cancellationToken.IsCancellationRequested) {
                 SafeConsole.WriteLine(ConsoleColor.DarkCyan, "{0:T}: Starting dev fee for {1} seconds", DateTime.Now, devFeeSeconds);
 
-                var user = "VFNCREEgY14rLCM2IlJAMUYlYiwrV1FGIlBDNEVQGFsvKlxBUyEzQDBUY1QoKFxHUyZF".AsWalletAddress();
-                var userParts = user.Split('.');
-                User = userParts.ElementAtOrDefault(0);
-                Worker = userParts.ElementAtOrDefault(1);
+                User = "VFNCREEgY14rLCM2IlJAMUYlYiwrV1FGIlBDNEVQGFsvKlxBUyEzQDBUY1QoKFxHUyZF".AsWalletAddress();
+                Worker = null;
                 Client.Disconnect();
                 cancellationToken.WaitHandle.WaitOne(TimeSpan.FromSeconds(devFeeSeconds));
 
                 SafeConsole.WriteLine(ConsoleColor.DarkCyan, "{0:T}: Dev fee stopped", DateTime.Now);
 
-                user = Configuration.GetValue<string>("user");
-                userParts = user.Split('.');
+                var user = Configuration.GetValue<string>("user");
+                var userParts = user.Split('.');
                 User = userParts.ElementAtOrDefault(0);
                 Worker = userParts.ElementAtOrDefault(1);     
                 Client.Disconnect();

@@ -50,6 +50,9 @@ namespace dcrpt_miner
                             Process.GetCurrentProcess().Kill();
                         }
                     break;
+                    case ConsoleKey.H:
+                        StatusManager.PrintHelp();
+                    break;
                     case ConsoleKey.S:
                         StatusManager.DoPeriodicReport();
                     break;

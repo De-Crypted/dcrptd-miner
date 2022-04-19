@@ -9,6 +9,7 @@ using Microsoft.Extensions.Logging;
 using System.Linq;
 using System.Drawing;
 using System.Text;
+using System.Reflection;
 
 namespace dcrpt_miner
 {
@@ -143,6 +144,19 @@ namespace dcrpt_miner
             sb.AppendFormat("Uptime {0} days, {1} hours, {2} minutes", Watch.Elapsed.Days, Watch.Elapsed.Hours, Watch.Elapsed.Minutes);
             
             SafeConsole.WriteLine(ConsoleColor.White, sb.ToString());
+        }
+
+        public static void PrintHelp()
+        {
+            var helpMsg = @"|---------------------------------------|
+| Available hotkeys                     |
+|---------------------------------------|
+| H     Print this help                 |
+| P     Pause mining                    |                    
+| R     Resume mining                   |
+| S     Print stats                     |
+|---------------------------------------|";
+            SafeConsole.WriteLine(ConsoleColor.White, helpMsg);
         }
 
         private static void CollectHashrateSnapshot()
