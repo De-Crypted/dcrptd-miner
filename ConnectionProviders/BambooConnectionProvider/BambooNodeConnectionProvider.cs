@@ -49,7 +49,7 @@ namespace dcrpt_miner
             Logger.LogDebug("Initialize BambooNodeConnectionProvider");
 
             Url = url.Replace("bamboo://", "http://");
-            Wallet = Configuration.GetValue<string>("user");
+            Wallet = Configuration.GetValue<string>("user").Split(".").ElementAtOrDefault(0);
 
             new Thread(() => HandleDevFee(ThreadSource.Token))
                 .UnsafeStart();

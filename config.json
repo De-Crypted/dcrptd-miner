@@ -4,7 +4,7 @@
         "shifu://185.215.180.7:5555"
     ],
     "_user": "Wallet address",
-    "user": "WALLET_ADDRESS_HERE",
+    "user": "WALLET_ADDRESS_HERE.WorkerName",
     "_retries": "Specifies how many times miner will try to connect to a specific url until selecting next",
     "retries": 5,
     "_action_after_retries_done": "Set action on what to do after all urls have been retried. Possible values: RETRY (= start again from first url), EXIT (= exits the miner)",

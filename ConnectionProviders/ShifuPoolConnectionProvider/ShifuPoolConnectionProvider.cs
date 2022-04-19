@@ -9,6 +9,7 @@ using Unclassified.Net;
 using Microsoft.Extensions.Logging;
 using System.Net;
 using System.Net.Sockets;
+using System.Linq;
 
 namespace dcrpt_miner 
 {
@@ -27,6 +28,7 @@ namespace dcrpt_miner
         private ConcurrentQueue<DateTime> LastShares = new ConcurrentQueue<DateTime>();
         private Job CurrentJob { get; set; }
         private string User { get; set; }
+        private string Worker { get; set; }
         private string Url { get; set; }
         private uint RetryCount { get; set; }
         public ShifuPoolConnectionProvider(IConfiguration configuration, Channels channels, ILogger<ShifuPoolConnectionProvider> logger)
@@ -140,16 +142,25 @@ namespace dcrpt_miner
 
         private async Task HandleConnection(CancellationToken cancellationToken) {
             Logger.LogDebug("Register connection handler");
-            User = Configuration.GetValue<string>("user");
+            var user = Configuration.GetValue<string>("user");
+            var userParts = user.Split('.');
+            User = userParts.ElementAtOrDefault(0);
+            Worker = userParts.ElementAtOrDefault(1);
 
             if (String.IsNullOrEmpty(User)) {
                 throw new Exception("Invalid user");
             }
 
-            SafeConsole.WriteLine(ConsoleColor.White, "User {0}", User);
+            SafeConsole.WriteLine(ConsoleColor.White, "User: {0}", User);
+            SafeConsole.WriteLine(ConsoleColor.White, "Worker: {0}", string.IsNullOrEmpty(Worker) ? "n/a" : Worker);
 
             if (User.Length != 50) {
                 SafeConsole.WriteLine(ConsoleColor.DarkRed, "Invalid user!");
+                return;
+            }
+
+            if (Worker?.Length > 15) {
+                SafeConsole.WriteLine(ConsoleColor.DarkRed, "Worker name too long (max 15)");
                 return;
             }
 
@@ -196,7 +207,8 @@ namespace dcrpt_miner
             Logger.LogDebug("ShifuPool:OnConnected");
 
             var json = JsonSerializer.Serialize(new Initialize {
-                address = User
+                address = User,
+                worker_name = string.IsNullOrEmpty(Worker) ? string.Empty : Worker
             });
 
             var data = Encoding.ASCII.GetBytes(json + "\n");
@@ -317,6 +329,7 @@ namespace dcrpt_miner
         {
             public string address { get; set; }
             public string type { get; set; } = "Initialize";
+            public string worker_name { get; set; }
             public string useragent { get; set; }
         }
 
