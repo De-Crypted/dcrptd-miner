@@ -64,7 +64,12 @@ namespace dcrpt_miner
                         SafeConsole.WriteLine(ConsoleColor.DarkGray, "{0:T}: Connecting to {1}", DateTime.Now, _url);
 
                         CurrentProvider = GetConnectionProvider(_url);
-                        await CurrentProvider.RunAsync(_url);
+
+                        try {
+                            await CurrentProvider.RunAsync(_url);
+                        } catch (Exception ex) {
+                            SafeConsole.WriteLine(ConsoleColor.DarkRed, ex.ToString());
+                        }
 
                         SafeConsole.WriteLine(ConsoleColor.DarkGray, "{0:T}: Disconnected from {1}", DateTime.Now, _url);
                     }

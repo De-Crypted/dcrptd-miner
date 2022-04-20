@@ -149,7 +149,7 @@ namespace dcrpt_miner
         public static void PrintHelp()
         {
             var helpMsg = @"|---------------------------------------|
-| Available hotkeys                     |
+| Hotkeys                     |
 |---------------------------------------|
 | H     Print this help                 |
 | P     Pause mining                    |                    

@@ -253,6 +253,12 @@ namespace Unclassified.Net
 							Message?.Invoke(this, new AsyncTcpEventArgs("Connection reset remotely", ex));
 							readLength = -2;
 						}
+						catch (IOException ex) when ((ex.InnerException as SocketException)?.ErrorCode == (int)SocketError.TimedOut)
+						{
+							Message?.Invoke(this, new AsyncTcpEventArgs("Connection timed out", ex));
+							readLength = -1;
+						}
+
 						if (readLength <= 0)
 						{
 							if (readLength == 0)
