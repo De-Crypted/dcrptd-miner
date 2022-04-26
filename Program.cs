@@ -1,15 +1,16 @@
 ﻿using System;
-using System.Threading;
 using System.Threading.Tasks;
-using Microsoft.AspNetCore.SignalR.Client;
 using System.Runtime.InteropServices;
 using System.Diagnostics;
-using System.Linq;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Logging;
 using System.Runtime.CompilerServices;
+using Microsoft.AspNetCore.Hosting;
+using System.Net;
+using Microsoft.AspNetCore.Hosting.Server;
+using Microsoft.AspNetCore.Http.Features;
+using System.Threading;
 
 namespace dcrpt_miner
 {
@@ -23,10 +24,15 @@ namespace dcrpt_miner
 
     class Program
     {
-        private static IConfiguration Configuration { get; set; }
-
         static async Task Main(string[] args)
         {
+            var configuration = new ConfigurationBuilder()
+                .AddCommandLine(args)
+                .AddJsonFile($"config.json", optional: true, reloadOnChange: true)
+                .Build();
+
+            var apiEnabled = configuration.GetValue<bool>("api:enabled");
+
             var host = Host.CreateDefaultBuilder(args)
                 .ConfigureAppConfiguration((hostingContext, configuration) => {
                     configuration.Sources.Clear();
@@ -34,8 +40,25 @@ namespace dcrpt_miner
                     configuration.AddJsonFile("config.json");
                     configuration.AddCommandLine(args);
                 })
-                .ConfigureServices(ConfigureServices)
-                .Build();
+                .ConfigureWebHost(webHost => {
+                    webHost.UseStartup<Startup>();
+
+                    if (!apiEnabled) {
+                        webHost.UseServer(new NoopServer());
+                        return;
+                    }
+
+                    webHost.UseKestrel((webHostBuilder, kestrel) => {
+                        var port = webHostBuilder.Configuration.GetValue<int>("api:port");
+                        var localhostOnly = webHostBuilder.Configuration.GetValue<bool>("api:localhost_only");
+
+                        if (localhostOnly) {
+                            kestrel.ListenLocalhost(port);
+                        } else {
+                            kestrel.ListenAnyIP(port);
+                        }
+                    });
+                });
 
             Console.Title = "dcrptd miner";
             await host.StartAsync();
@@ -65,19 +88,20 @@ namespace dcrpt_miner
                 }
             }
         }
+    }
 
-        private static void ConfigureServices(IServiceCollection services)
-        {
-            services.AddHttpClient();
-            
-            services.AddSingleton<DcrptConnectionProvider>();
-            services.AddSingleton<ShifuPoolConnectionProvider>();
-            services.AddSingleton<BambooNodeConnectionProvider>();
-            services.AddSingleton<Channels>();
+    class NoopServer : IServer
+    {
+        public IFeatureCollection Features => new FeatureCollection();
 
-            services.AddHostedService<WorkerManager>();
-            services.AddHostedService<ConnectionManager>();
-            services.AddHostedService<StatusManager>();
-        }
+        public void Dispose() { }
+
+        public Task StartAsync<TContext>(IHttpApplication<TContext> application, CancellationToken cancellationToken) where TContext : notnull
+            => Task.CompletedTask;
+
+        public Task StopAsync(CancellationToken cancellationToken) 
+            => Task.CompletedTask;
+
+        
     }
 }
