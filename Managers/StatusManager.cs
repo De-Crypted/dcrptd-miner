@@ -2,10 +2,10 @@ using System;
 using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Linq;
 using System.Collections.Generic;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
 using System.Linq;
 using System.Drawing;
 using System.Text;
@@ -49,6 +49,27 @@ namespace dcrpt_miner
         {
             ThreadSource.Cancel();
             return Task.CompletedTask;
+        }
+
+        public static Stats QueryStats()
+        {
+            ulong hashes = 0;
+
+            foreach (var h in CpuHashCount) {
+                hashes += h;
+            }
+
+            foreach (var h in GpuHashCount) {
+                hashes += h;
+            }
+
+            return new Stats
+            {
+                hashes = hashes,
+                uptime = Convert.ToInt64(Watch.Elapsed.TotalSeconds),
+                ver = "1.2.0", // TODO: Set Assembly version upon release
+                rejected = RejectedShares
+            };
         }
 
         public static ulong GetHashrate(String type, int id, TimeSpan from)

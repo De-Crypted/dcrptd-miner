@@ -16,7 +16,7 @@ namespace dcrpt_miner
         {
             var accessToken = configuration.GetValue<string>("api:access_token");
 
-            if (!string.IsNullOrEmpty(accessToken)) {
+            /*if (accessToken != null && !string.IsNullOrEmpty(accessToken)) {
                 if (Request.HttpContext.Request.Headers.Authorization.Count != 1) {
                     return BadRequest();
                 }
@@ -26,9 +26,9 @@ namespace dcrpt_miner
                 if (token != accessToken) {
                     return Unauthorized();
                 }
-            }
+            }*/
 
-            return Content("hello");
+            return Json(StatusManager.QueryStats());
         }
     }
 }
