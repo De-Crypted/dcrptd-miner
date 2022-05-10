@@ -36,6 +36,7 @@ namespace dcrpt_miner
                 .UnsafeStart();
 
             new Thread(async () => {
+                var token = ThreadSource.Token;
                 var urls = Configuration.GetSection("url").Get<List<string>>();
 
                 if (urls == null) {
@@ -73,6 +74,8 @@ namespace dcrpt_miner
 
                         SafeConsole.WriteLine(ConsoleColor.DarkGray, "{0:T}: Disconnected from {1}", DateTime.Now, _url);
                     }
+
+                    token.WaitHandle.WaitOne(TimeSpan.FromSeconds(5));
                 } while (keepReconnecting);
 
                 SafeConsole.WriteLine(ConsoleColor.DarkRed, "{0:T}: Miner shutting down...", DateTime.Now);

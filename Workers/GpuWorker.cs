@@ -206,7 +206,7 @@ namespace dcrpt_miner
                 workMultiplier = maxLocalSize;
             }
 
-            logger.LogWarning("platform, {}, devicename, {}, maxLocalSize = {}, multiplier = {}, kernelWorkGroupSize = {}, kernelPreferredWorkGroupSizeMultiple = {}",
+            logger.LogDebug("platform, {}, devicename, {}, maxLocalSize = {}, multiplier = {}, kernelWorkGroupSize = {}, kernelPreferredWorkGroupSizeMultiple = {}",
                 device.PlatformName,
                 device.DeviceName,
                 maxLocalSize,
@@ -224,7 +224,7 @@ namespace dcrpt_miner
             var finalLocalSize1 = localWorkGroupSize - (localWorkGroupSize % kPreferredWorkGroupSizeMultiple);
             var finalLocalSize2 = maxLocalSize / kWorkGroupSize;
 
-            logger.LogWarning("dimension {} x {}", finalLocalSize1, finalLocalSize2);
+            logger.LogDebug("dimension {} x {}", finalLocalSize1, finalLocalSize2);
 
             var localDimension = new IntPtr[] { new IntPtr(finalLocalSize1), new IntPtr(finalLocalSize2) };
             var globalDimension = new IntPtr[] { new IntPtr(maxLocalSize * workMultiplier.Value), new IntPtr(finalLocalSize2) };

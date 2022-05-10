@@ -203,6 +203,7 @@ namespace dcrpt_miner
                 await Client.RunAsync();
                 RetryCount++;
 
+                cancellationToken.WaitHandle.WaitOne(TimeSpan.FromSeconds(1));
                 SafeConsole.WriteLine(ConsoleColor.DarkGray, "{0:T}: Pool connection interrupted, retrying ({1}/{2})...", DateTime.Now, RetryCount, retries);
             }
         }
