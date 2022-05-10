@@ -6,10 +6,7 @@ using System.Linq;
 using System.Collections.Generic;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
-using System.Linq;
-using System.Drawing;
 using System.Text;
-using System.Reflection;
 
 namespace dcrpt_miner
 {

@@ -156,6 +156,16 @@ namespace dcrpt_miner.OpenCL
         [SuppressGCTransition]
         public static extern ClErrorCode clFinish(IntPtr commandQueue);
 
+        [DllImport(LIBRARY)]
+        [SuppressGCTransition]
+        public static extern ClErrorCode clGetKernelWorkGroupInfo(
+            IntPtr kernel,
+            IntPtr device,
+            ClKernelWorkGroupInfo paramName,
+            IntPtr paramValueSize,
+            IntPtr paramValue,
+            out IntPtr paramValueSizeRet);
+
         public delegate void CreateContextNotify(string err, byte[] data, IntPtr cb, IntPtr userData);
         public delegate void BuildProgramNotify(IntPtr program, IntPtr userData);
         public delegate void ComputeEventCallback(IntPtr @event, int cmdExecStatusOrErr, IntPtr userData);

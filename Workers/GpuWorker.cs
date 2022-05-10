@@ -176,29 +176,61 @@ namespace dcrpt_miner
 
             Marshal.FreeHGlobal(workGroupSizeBuf);
 
+            Cl.clGetKernelWorkGroupInfo(kernel, device.Device, ClKernelWorkGroupInfo.WorkGroupSize, IntPtr.Zero, IntPtr.Zero, out var kernelWorkGroupSize)
+                .ThrowIfError();
+
+            var kernelWorkGroupSizeBuf = Marshal.AllocHGlobal(kernelWorkGroupSize);
+
+            Cl.clGetKernelWorkGroupInfo(kernel, device.Device, ClKernelWorkGroupInfo.WorkGroupSize, kernelWorkGroupSize, kernelWorkGroupSizeBuf, out _)
+                .ThrowIfError();
+
+            var kWorkGroupSize = (long)Marshal.PtrToStructure(kernelWorkGroupSizeBuf, typeof(long));
+
+            Marshal.FreeHGlobal(kernelWorkGroupSizeBuf);
+
+            Cl.clGetKernelWorkGroupInfo(kernel, device.Device, ClKernelWorkGroupInfo.WorkGroupSize, IntPtr.Zero, IntPtr.Zero, out var preferredWorkGroupSizeMultipleSize)
+                .ThrowIfError();
+
+            var preferredWorkGroupSizeMultipleSizeBuf = Marshal.AllocHGlobal(preferredWorkGroupSizeMultipleSize);
+
+            Cl.clGetKernelWorkGroupInfo(kernel, device.Device, ClKernelWorkGroupInfo.PreferredWorkGroupSizeMultiple, preferredWorkGroupSizeMultipleSize, preferredWorkGroupSizeMultipleSizeBuf, out _)
+                .ThrowIfError();
+
+            var kPreferredWorkGroupSizeMultiple = (long)Marshal.PtrToStructure(preferredWorkGroupSizeMultipleSizeBuf, typeof(long));
+
+            Marshal.FreeHGlobal(preferredWorkGroupSizeMultipleSizeBuf);
+
             bool isNVIDIA = device.PlatformName.Contains("NVIDIA");
 
             if (workMultiplier == null) {
                 workMultiplier = maxLocalSize;
             }
 
-            logger.LogDebug("platform, {}, devicename, {}, maxLocalSize = {}, multiplier = {}",
+            logger.LogWarning("platform, {}, devicename, {}, maxLocalSize = {}, multiplier = {}, kernelWorkGroupSize = {}, kernelPreferredWorkGroupSizeMultiple = {}",
                 device.PlatformName,
                 device.DeviceName,
                 maxLocalSize,
-                workMultiplier);
-
-            var maxGlobalSize = maxLocalSize * workMultiplier.Value;
-            var maxGlobalSize1 = 1; //maxLocalSize / 2;
+                workMultiplier,
+                kWorkGroupSize,
+                kPreferredWorkGroupSizeMultiple);
 
             var concat = new byte[64];
 
             var concatLen = new IntPtr(concat.Length * sizeof(byte));
-            var foundLen = new IntPtr(maxGlobalSize * sizeof(byte));
+            var foundLen = new IntPtr(1024 * sizeof(byte));
             var countLen = new IntPtr(sizeof(int));
 
-            var globalDimension = new IntPtr[] { new IntPtr(maxGlobalSize) };
-            var localDimension = new IntPtr[] { new IntPtr(maxLocalSize / 2) };
+            var localWorkGroupSize = Math.Min(kWorkGroupSize, maxLocalSize);
+            var finalLocalSize1 = localWorkGroupSize - (localWorkGroupSize % kPreferredWorkGroupSizeMultiple);
+            var finalLocalSize2 = maxLocalSize / kWorkGroupSize;
+
+            logger.LogWarning("dimension {} x {}", finalLocalSize1, finalLocalSize2);
+
+            var localDimension = new IntPtr[] { new IntPtr(finalLocalSize1), new IntPtr(finalLocalSize2) };
+            var globalDimension = new IntPtr[] { new IntPtr(maxLocalSize * workMultiplier.Value), new IntPtr(finalLocalSize2) };
+
+            //var localDimension = new IntPtr[] { new IntPtr(32), new IntPtr(32) };
+            //var globalDimension = new IntPtr[] { new IntPtr(32 * 32), new IntPtr(32 * 32) };
 
             var concatHandle = GCHandle.Alloc(null, GCHandleType.Pinned);
             var foundHandle = GCHandle.Alloc(null, GCHandleType.Pinned);
@@ -230,6 +262,8 @@ namespace dcrpt_miner
                 .ThrowIfError();
             Cl.clSetKernelArg(kernel, 2, (IntPtr)IntPtr.Size, countBufHandle.AddrOfPinnedObject())
                 .ThrowIfError();
+            //Cl.clSetKernelArg(kernel, 3, new IntPtr(1024 * 32 * sizeof(byte)), IntPtr.Zero)
+            //    .ThrowIfError();
 
             concatBufHandle.Free();
             foundBufHandle.Free();
@@ -284,7 +318,7 @@ namespace dcrpt_miner
                 while(!job.CancellationToken.IsCancellationRequested) {
                     var start = DateTime.Now;
 
-                    error = Cl.clEnqueueNDRangeKernel(cmdQueue, kernel, 1, null, globalDimension, localDimension, 0, null, out ev);
+                    error = Cl.clEnqueueNDRangeKernel(cmdQueue, kernel, (uint)localDimension.Length, null, globalDimension, null, 0, null, out ev);
                     Cl.clReleaseEvent(ev);
 
                     buf0 = Cl.clEnqueueMapBuffer(cmdQueue, concatBuf, false, ClMapFlags.Write, IntPtr.Zero, concatLen, 0, null, out ev, out buf0Err);
@@ -307,7 +341,7 @@ namespace dcrpt_miner
                     var end = DateTime.Now;
                     executionTimeMs = (int)(end - start).TotalMilliseconds;
 
-                    logger.LogTrace("GPU batch execution took {} ms. {} hashes were completed.", executionTimeMs, (ulong)maxGlobalSize * (ulong)maxGlobalSize1 * 512);
+                    logger.LogTrace("GPU batch execution took {} ms. {} hashes were completed.", executionTimeMs, globalDimension[0].ToInt64() * globalDimension[1].ToInt64() * workMultiplier.Value);
 
                     error.ThrowIfError();
                     buf0Err.ThrowIfError();
@@ -368,7 +402,7 @@ namespace dcrpt_miner
                         .ThrowIfError();
                     Cl.clReleaseEvent(ev);
 
-                    StatusManager.GpuHashCount[id] += (ulong)maxGlobalSize * (ulong)maxGlobalSize1 * (ulong)workSize;
+                    StatusManager.GpuHashCount[id] += (ulong)(globalDimension[0].ToInt64() * globalDimension[1].ToInt64() * (long)workSize);
 
                     pauseEvent.WaitOne();
                 }
