@@ -44,57 +44,62 @@ namespace dcrpt_miner
                     .ThrowIfError();
 
                 foreach (var platform in platforms) {
-                     Cl.clGetPlatformInfo(platform, ClPlatformInfo.Vendor, IntPtr.Zero, IntPtr.Zero, out var platformSize)
-                        .ThrowIfError();
+                    try {
+                        Cl.clGetPlatformInfo(platform, ClPlatformInfo.Vendor, IntPtr.Zero, IntPtr.Zero, out var platformSize)
+                            .ThrowIfError();
 
-                    var platformBuf = Marshal.AllocHGlobal(platformSize);
+                        var platformBuf = Marshal.AllocHGlobal(platformSize);
 
-                    Cl.clGetPlatformInfo(platform, ClPlatformInfo.Vendor, platformSize, platformBuf, out _)
-                        .ThrowIfError();
+                        Cl.clGetPlatformInfo(platform, ClPlatformInfo.Vendor, platformSize, platformBuf, out _)
+                            .ThrowIfError();
 
-                    Cl.clGetDeviceIDs(platform, ClDeviceType.Gpu, 0, null, out var numDevices)
-                        .ThrowIfError();
+                        Cl.clGetDeviceIDs(platform, ClDeviceType.Gpu, 0, null, out var numDevices)
+                            .ThrowIfError();
 
-                    var devices = new IntPtr[numDevices];
+                        var devices = new IntPtr[numDevices];
 
-                    Cl.clGetDeviceIDs(platform, ClDeviceType.Gpu, numDevices, devices, out numDevices)
-                        .ThrowIfError();
+                        Cl.clGetDeviceIDs(platform, ClDeviceType.Gpu, numDevices, devices, out numDevices)
+                            .ThrowIfError();
 
-                    foreach (var device in devices) {
-                        try {
-                            Cl.clGetDeviceInfo(device, ClDeviceInfo.Name, IntPtr.Zero, IntPtr.Zero, out var deviceSize)
-                                .ThrowIfError();
+                        foreach (var device in devices) {
+                            try {
+                                Cl.clGetDeviceInfo(device, ClDeviceInfo.Name, IntPtr.Zero, IntPtr.Zero, out var deviceSize)
+                                    .ThrowIfError();
 
-                            var deviceBuf = Marshal.AllocHGlobal(deviceSize);
+                                var deviceBuf = Marshal.AllocHGlobal(deviceSize);
 
-                            Cl.clGetDeviceInfo(device, ClDeviceInfo.Name, deviceSize, deviceBuf, out _)
-                                .ThrowIfError();
+                                Cl.clGetDeviceInfo(device, ClDeviceInfo.Name, deviceSize, deviceBuf, out _)
+                                    .ThrowIfError();
 
-                            var platformName = Marshal.PtrToStringAnsi(platformBuf);
-                            var deviceName = Marshal.PtrToStringAnsi(deviceBuf);
+                                var platformName = Marshal.PtrToStringAnsi(platformBuf);
+                                var deviceName = Marshal.PtrToStringAnsi(deviceBuf);
 
-                            Console.WriteLine("[{0}]: {1}{2}",  
-                                id, 
-                                selectedGpus.Contains(id.ToString()) || selectedGpus.Contains(deviceName) ? "*" : "", 
-                                deviceName);
+                                Console.WriteLine("[{0}]: {1}{2}",  
+                                    id, 
+                                    selectedGpus.Contains(id.ToString()) || selectedGpus.Contains(deviceName) ? "*" : "", 
+                                    deviceName);
 
-                            gpuDevices.Add(new GpuDevice {
-                                Platform = platform,
-                                PlatformName = platformName.ToString(),
-                                Device = device,
-                                DeviceName = deviceName.ToString(),
-                                Id = id
-                            });
+                                gpuDevices.Add(new GpuDevice {
+                                    Platform = platform,
+                                    PlatformName = platformName.ToString(),
+                                    Device = device,
+                                    DeviceName = deviceName.ToString(),
+                                    Id = id
+                                });
 
-                            Marshal.FreeHGlobal(deviceBuf);
-                        } catch (Exception) {
-                            Console.WriteLine("[{0}]: Unknown device(DeviceQueryFailed)",  id);
+                                Marshal.FreeHGlobal(deviceBuf);
+                            } catch (Exception ex) {
+                                Console.WriteLine("[{0}]: Unknown device(DeviceQueryFailed)",  id);
+                                logger.LogDebug(ex, "Device query failed");
+                            }
+
+                            id++;
                         }
 
-                        id++;
+                        Marshal.FreeHGlobal(platformBuf);
+                    } catch (Exception ex) {
+                        logger.LogDebug(ex, "Platform query failed");
                     }
-
-                    Marshal.FreeHGlobal(platformBuf);
                 }
 
                 return gpuDevices;
