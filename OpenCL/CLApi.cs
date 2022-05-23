@@ -173,14 +173,18 @@ namespace dcrpt_miner.OpenCL
         public static void NvidiaWait(IntPtr @event, int milliseconds) {
             using(var eventSignal = new ManualResetEvent(false)) {
                 var callback = new Cl.ComputeEventCallback((IntPtr eventHandle, int cmdExecStatusOrErr, IntPtr userData) => {
-                    if (!eventSignal.SafeWaitHandle.IsClosed) {
-                        eventSignal.Set();
+                    try {
+                        if (!eventSignal.SafeWaitHandle.IsClosed) {
+                            eventSignal.Set();
+                        }
+
+                        var handle = GCHandle.FromIntPtr(userData);
+                        handle.Free();
+
+                        clReleaseEvent(eventHandle);
+                    } catch (Exception){ 
+                        // TODO: need global logger
                     }
-
-                    var handle = GCHandle.FromIntPtr(userData);
-                    handle.Free();
-
-                    clReleaseEvent(eventHandle);
                 });
 
                 var handle = GCHandle.Alloc(callback);
@@ -188,7 +192,11 @@ namespace dcrpt_miner.OpenCL
 
                 Cl.clSetEventCallback(@event, 0, callback, handlePointer);
 
-                eventSignal.WaitOne(milliseconds);
+                try {
+                    eventSignal.WaitOne(milliseconds);
+                } catch (Exception) {
+                    // TODO: need global logger
+                }
             }
         }
 

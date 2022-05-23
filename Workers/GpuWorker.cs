@@ -61,32 +61,37 @@ namespace dcrpt_miner
                         .ThrowIfError();
 
                     foreach (var device in devices) {
-                        Cl.clGetDeviceInfo(device, ClDeviceInfo.Name, IntPtr.Zero, IntPtr.Zero, out var deviceSize)
-                            .ThrowIfError();
+                        try {
+                            Cl.clGetDeviceInfo(device, ClDeviceInfo.Name, IntPtr.Zero, IntPtr.Zero, out var deviceSize)
+                                .ThrowIfError();
 
-                        var deviceBuf = Marshal.AllocHGlobal(deviceSize);
+                            var deviceBuf = Marshal.AllocHGlobal(deviceSize);
 
-                        Cl.clGetDeviceInfo(device, ClDeviceInfo.Name, deviceSize, deviceBuf, out _)
-                            .ThrowIfError();
+                            Cl.clGetDeviceInfo(device, ClDeviceInfo.Name, deviceSize, deviceBuf, out _)
+                                .ThrowIfError();
 
-                        var platformName = Marshal.PtrToStringAnsi(platformBuf);
-                        var deviceName = Marshal.PtrToStringAnsi(deviceBuf);
+                            var platformName = Marshal.PtrToStringAnsi(platformBuf);
+                            var deviceName = Marshal.PtrToStringAnsi(deviceBuf);
 
-                        Console.WriteLine("[{0}]: {1}{2}",  
-                            id, 
-                            selectedGpus.Contains(id.ToString()) || selectedGpus.Contains(deviceName) ? "*" : "", 
-                            deviceName);
+                            Console.WriteLine("[{0}]: {1}{2}",  
+                                id, 
+                                selectedGpus.Contains(id.ToString()) || selectedGpus.Contains(deviceName) ? "*" : "", 
+                                deviceName);
 
-                        gpuDevices.Add(new GpuDevice {
-                            Platform = platform,
-                            PlatformName = platformName.ToString(),
-                            Device = device,
-                            DeviceName = deviceName.ToString(),
-                            Id = id
-                        });
+                            gpuDevices.Add(new GpuDevice {
+                                Platform = platform,
+                                PlatformName = platformName.ToString(),
+                                Device = device,
+                                DeviceName = deviceName.ToString(),
+                                Id = id
+                            });
+
+                            Marshal.FreeHGlobal(deviceBuf);
+                        } catch (Exception) {
+                            Console.WriteLine("[{0}]: Unknown device(DeviceQueryFailed)",  id);
+                        }
 
                         id++;
-                        Marshal.FreeHGlobal(deviceBuf);
                     }
 
                     Marshal.FreeHGlobal(platformBuf);
@@ -162,6 +167,9 @@ namespace dcrpt_miner
             var workMultiplier = configuration.GetValue<long?>("gpu:work_multiplier");
             logger.LogDebug("work_multiplier = {}", workMultiplier);
 
+            var intensity = configuration.GetValue<int>("gpu:intensity", 1);
+            logger.LogDebug("intensity = {}", intensity);
+
             Initialize(device, workSize, out var context, out var kernel);
 
             Cl.clGetDeviceInfo(device.Device, ClDeviceInfo.MaxWorkGroupSize, IntPtr.Zero, IntPtr.Zero, out var workGroupSize)
@@ -222,12 +230,11 @@ namespace dcrpt_miner
 
             var localWorkGroupSize = Math.Min(kWorkGroupSize, maxLocalSize);
             var finalLocalSize1 = localWorkGroupSize - (localWorkGroupSize % kPreferredWorkGroupSizeMultiple);
-            var finalLocalSize2 = maxLocalSize / kWorkGroupSize;
 
-            logger.LogDebug("dimension {} x {}", finalLocalSize1, finalLocalSize2);
+            logger.LogDebug("dimension {} x {}", finalLocalSize1, intensity );
 
-            var localDimension = new IntPtr[] { new IntPtr(finalLocalSize1), new IntPtr(finalLocalSize2) };
-            var globalDimension = new IntPtr[] { new IntPtr(maxLocalSize * workMultiplier.Value), new IntPtr(finalLocalSize2) };
+            var localDimension = new IntPtr[] { new IntPtr(finalLocalSize1 * intensity) };
+            var globalDimension = new IntPtr[] { new IntPtr(maxLocalSize * workMultiplier.Value) };
 
             //var localDimension = new IntPtr[] { new IntPtr(32), new IntPtr(32) };
             //var globalDimension = new IntPtr[] { new IntPtr(32 * 32), new IntPtr(32 * 32) };
@@ -341,7 +348,7 @@ namespace dcrpt_miner
                     var end = DateTime.Now;
                     executionTimeMs = (int)(end - start).TotalMilliseconds;
 
-                    logger.LogTrace("GPU batch execution took {} ms. {} hashes were completed.", executionTimeMs, globalDimension[0].ToInt64() * globalDimension[1].ToInt64() * workMultiplier.Value);
+                    logger.LogTrace("GPU batch execution took {} ms. {} hashes were completed.", executionTimeMs, globalDimension[0].ToInt64() * workMultiplier.Value);
 
                     error.ThrowIfError();
                     buf0Err.ThrowIfError();
@@ -402,7 +409,7 @@ namespace dcrpt_miner
                         .ThrowIfError();
                     Cl.clReleaseEvent(ev);
 
-                    StatusManager.GpuHashCount[id] += (ulong)(globalDimension[0].ToInt64() * globalDimension[1].ToInt64() * (long)workSize);
+                    StatusManager.GpuHashCount[id] += (ulong)(globalDimension[0].ToInt64() * (long)workSize);
 
                     pauseEvent.WaitOne();
                 }

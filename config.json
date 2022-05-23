@@ -17,7 +17,9 @@
         "_work_multiplier": "Specifies how much work to queue on gpu. Set to null for auto detect",
         "work_multiplier": null,
         "_work_size": "Number of hashes per work thread. Larger should be better but there is greater delay until valid shares are submitted resulting in potential rejected shares",
-        "work_size": 512
+        "work_size": 512,
+        "_intensity": "Typical values: 1, 2, 3 or 4. Higher value instructs GPU to run more work items parallel which should give better performance if GPU can handle it.",
+        "intensity": 1
     },
     "cpu": {
         "_enabled": "Enable or disable cpu miner",
