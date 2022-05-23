@@ -52,12 +52,12 @@ namespace dcrpt_miner
                     Cl.clGetPlatformInfo(platform, ClPlatformInfo.Vendor, platformSize, platformBuf, out _)
                         .ThrowIfError();
 
-                    Cl.clGetDeviceIDs(platform, ClDeviceType.All, 0, null, out var numDevices)
+                    Cl.clGetDeviceIDs(platform, ClDeviceType.Gpu, 0, null, out var numDevices)
                         .ThrowIfError();
 
                     var devices = new IntPtr[numDevices];
 
-                    Cl.clGetDeviceIDs(platform, ClDeviceType.All, numDevices, devices, out numDevices)
+                    Cl.clGetDeviceIDs(platform, ClDeviceType.Gpu, numDevices, devices, out numDevices)
                         .ThrowIfError();
 
                     foreach (var device in devices) {
