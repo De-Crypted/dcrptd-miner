@@ -19,9 +19,9 @@ namespace dcrpt_miner
             services.AddHttpClient();
             services.AddControllers();
 
-            services.AddSingleton<DcrptConnectionProvider>();
-            services.AddSingleton<ShifuPoolConnectionProvider>();
-            services.AddSingleton<BambooNodeConnectionProvider>();
+            services.AddTransient<DcrptConnectionProvider>();
+            services.AddTransient<ShifuPoolConnectionProvider>();
+            services.AddTransient<BambooNodeConnectionProvider>();
             services.AddSingleton<Channels>();
 
             services.AddHostedService<WorkerManager>();

@@ -142,7 +142,8 @@ namespace dcrpt_miner
                     var tjob = new Job {
                         Nonce = job.Nonce,
                         Difficulty = job.Difficulty,
-                        CancellationToken = TokenSource.Token
+                        CancellationToken = TokenSource.Token,
+                        Algorithm = job.Algorithm
                     };
 
                     worker.Add(tjob);

@@ -10,6 +10,7 @@ namespace dcrpt_miner
         public byte[] Nonce { get; set; }
         public int Difficulty { get; set; }
         public CancellationToken CancellationToken { get; set; }
+        public Type Algorithm { get; set; }
     }
 
     public enum JobType {

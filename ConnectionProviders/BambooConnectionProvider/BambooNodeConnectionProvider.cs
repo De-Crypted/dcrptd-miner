@@ -275,10 +275,11 @@ namespace dcrpt_miner
                         Type = jobType,
                         Name = JobName,
                         Nonce = CurrentBlock.Nonce,
-                        Difficulty = (int)problem.challengeSize
+                        Difficulty = (int)problem.challengeSize,
+                        Algorithm = CurrentBlock.Id >= 400 ? typeof(Pufferfish2BmbAlgo) : typeof(SHA256BmbAlgo) // TODO: testnet only
                     });
                 }
-                            }
+            }
             catch (Exception ex) {
                 throw new Exception("CreateBlock failed", ex);
             } finally {

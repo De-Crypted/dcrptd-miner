@@ -135,7 +135,6 @@ namespace dcrpt_miner
                 var cpuHashes = GetHashrate("CPU", 0, TimeSpan.FromMinutes(1));
                 CalculateUnit(cpuHashes, out double cpu_hashrate, out string cpu_unit);
                 sb.AppendFormat("| Hashrate (CPU) \t{0:N2} {1}\t|{2}", cpu_hashrate, cpu_unit, Environment.NewLine);
-
                 totalHashes += cpuHashes;
             }
 
