@@ -8,8 +8,9 @@ namespace dcrpt_miner
 {
     public class Pufferfish2BmbAlgo : IAlgorithm
     {
-        public bool GPU => false;
-        public bool CPU => true;
+        public static bool GPU => false;
+        public static bool CPU => true;
+        public static string Name => "pufferfish2bmb";
 
         private RandomNumberGenerator _global = RandomNumberGenerator.Create();
 
@@ -20,7 +21,7 @@ namespace dcrpt_miner
             var rand = new Random(BitConverter.ToInt32(buffer, 0));
 
             Span<byte> concat = new byte[64];
-            Span<byte> hash = new byte[32];
+            Span<byte> hash = new byte[119]; // TODO: verify this matches PF_HASHSPACE in all cases
             Span<byte> solution = new byte[32];
 
             int challengeBytes = job.Difficulty / 8;
@@ -32,49 +33,45 @@ namespace dcrpt_miner
 
             Thread.BeginThreadAffinity();
 
-            //while(!token.IsCancellationRequested) {
-            while(true) {
-                fixed (byte* ptr = concat, hashPtr = hash)
+            using (SHA256 sha256 = SHA256.Create())
+            fixed (byte* ptr = concat, hashPtr = hash)
+            {
+                ulong* locPtr = (ulong*)(ptr + 33);
+                uint* hPtr = (uint*)hashPtr;
+
+                uint count = 10;
+                while (!job.CancellationToken.IsCancellationRequested)
                 {
-                    ulong* locPtr = (ulong*)(ptr + 33);
-                    uint* hPtr = (uint*)hashPtr;
+                    ++*locPtr;
 
-                    uint count = 10;
-                    //while (!job.CancellationToken.IsCancellationRequested)
-                    while(true)
+                    Unmanaged.pf_newhash(ptr, 64, 1, 8, hashPtr);
+                    var sha256Hash = sha256.ComputeHash(hash.ToArray());
+
+                    if (checkLeadingZeroBits(sha256Hash, job.Difficulty, challengeBytes, remainingBits))
                     {
-                        ++*locPtr;
-
-                        Unmanaged.pf_newhash(ptr, 64, 1, 8, hashPtr);
-                        //Console.WriteLine(hash.ToArray().AsString());
-
-                        if (checkLeadingZeroBits(hashPtr, job.Difficulty, challengeBytes, remainingBits))
-                        {
-                            Console.WriteLine("found");
-                            //channels.Solutions.Writer.TryWrite(concat.Slice(32).ToArray());
-                        }
-
-                        if (count == 0) {
-                            StatusManager.CpuHashCount[id] += 10;
-
-                            count = 10;
-                            if (id < 2) {
-                                // Be nice to other threads and processes
-                                Thread.Sleep(1);
-                            }
-
-                            pauseEvent.WaitOne();
-                        }
-
-                        --count;
+                        channels.Solutions.Writer.TryWrite(concat.Slice(32).ToArray());
                     }
+
+                    if (count == 0) {
+                        StatusManager.CpuHashCount[id] += 10;
+
+                        count = 10;
+                        if (id < 2) {
+                            // Be nice to other threads and processes
+                            Thread.Sleep(1);
+                        }
+
+                        pauseEvent.WaitOne();
+                    }
+
+                    --count;
                 }
             }
         }
 
         // TODO: Move to util class or something??
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private unsafe bool checkLeadingZeroBits(byte* hash, int challengeSize, int challengeBytes, int remainingBits) {
+        private unsafe bool checkLeadingZeroBits(byte[] hash, int challengeSize, int challengeBytes, int remainingBits) {
             for (int i = 0; i < challengeBytes; i++) {
                 if (hash[i] != 0) return false;
             }

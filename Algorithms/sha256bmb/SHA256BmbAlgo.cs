@@ -9,8 +9,9 @@ namespace dcrpt_miner
 {
     public class SHA256BmbAlgo : IAlgorithm
     {
-        public bool GPU => true;
-        public bool CPU => true;
+        public static bool GPU => true;
+        public static bool CPU => true;
+        public static string Name => "sha256bmb";
 
         private RandomNumberGenerator _global = RandomNumberGenerator.Create();
 

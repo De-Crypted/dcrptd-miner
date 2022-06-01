@@ -4,8 +4,9 @@ namespace dcrpt_miner
 {
     public interface IAlgorithm
     {
-        bool GPU { get; }
-        bool CPU { get; }
+        static string Name { get; }
+        static bool GPU { get; }
+        static bool CPU { get; }
 
         void DoCPUWork(uint id, Job job, Channels channels, ManualResetEvent pauseEvent, CancellationToken token);
     }

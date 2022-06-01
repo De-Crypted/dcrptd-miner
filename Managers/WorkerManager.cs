@@ -139,6 +139,8 @@ namespace dcrpt_miner
                     Console.ResetColor();
                 }
 
+                StatusManager.AlgoName = (string)job.Algorithm.GetProperty("Name").GetValue(null);
+
                 Logger.LogDebug("Assigning job to workers");
                 Parallel.ForEach(Workers, worker => {
                     var tjob = new Job {

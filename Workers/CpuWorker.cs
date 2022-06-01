@@ -24,15 +24,9 @@ namespace dcrpt_miner
             while(!token.IsCancellationRequested) {
                 var job = queue.Take(token);
 
-                System.Console.WriteLine("ALGO: " + job.Type.ToString());
-
                 if (algo == null || algo.GetType() != job.Algorithm) {
                     algo = (IAlgorithm)Activator.CreateInstance(job.Algorithm);
                 }
-
-               if (!algo.CPU) {
-                   return;
-               }
 
                algo.DoCPUWork(id, job, channels, pauseEvent, token);
             }

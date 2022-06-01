@@ -18,6 +18,7 @@ namespace dcrpt_miner
         public static long DroppedShares;
         public static ulong[] CpuHashCount = new ulong[0];
         public static ulong[] GpuHashCount = new ulong[0];
+        public static string AlgoName = "n/a";
 
         private static Stopwatch Watch { get; set; }
         private static SpinLock SpinLock = new SpinLock();
@@ -123,7 +124,7 @@ namespace dcrpt_miner
 
             var sb = new StringBuilder();
             sb.AppendLine("|---------------------------------------|");
-            sb.AppendLine("| Periodic Report\t\t\t|");
+            sb.AppendFormat("| Periodic Report - {0}{1}|{2}", AlgoName, AlgoName == "n/a" ? "\t\t\t" : "\t", Environment.NewLine);
             sb.AppendLine("|---------------------------------------|");
             sb.AppendFormat("| Accepted \t\t{0}\t\t|{1}", Interlocked.Read(ref AcceptedShares), Environment.NewLine);
             sb.AppendFormat("| Dropped \t\t{0}\t\t|{1}", Interlocked.Read(ref DroppedShares), Environment.NewLine);
