@@ -19,7 +19,7 @@ namespace dcrpt_miner
             _global.GetBytes(buffer);
             var rand = new Random(BitConverter.ToInt32(buffer, 0));
 
-            Span<byte> concat = new byte[64]; //stackalloc byte[64];
+            Span<byte> concat = new byte[64];
             Span<byte> hash = new byte[32];
             Span<byte> solution = new byte[32];
 
@@ -29,6 +29,8 @@ namespace dcrpt_miner
             for (int i = 0; i < 32; i++) concat[i] = job.Nonce[i];
             for (int i = 33; i < 64; i++) concat[i] = (byte)rand.Next(0, 256);
             concat[32] = (byte)job.Difficulty;
+
+            Thread.BeginThreadAffinity();
 
             //while(!token.IsCancellationRequested) {
             while(true) {

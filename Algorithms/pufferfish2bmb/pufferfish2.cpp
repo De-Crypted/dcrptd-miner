@@ -262,7 +262,7 @@ int pf_newhash(const char *pass, const size_t pass_sz, const size_t cost_t, cons
     int ret = 0;
 
     if (cost_t > 63 || cost_m > 53) {
-        return EOVERFLOW;
+        return 132;
     }
 
     ret = pf_mksalt("foobar", 5, cost_t, cost_m, salt);

@@ -83,8 +83,10 @@ namespace dcrpt_miner
 
                     var tid = i;
                     Logger.LogDebug("Starting CpuWorker[{}] thread", tid);
-                    new Thread(() => CpuWorker.DoWork(tid, queue, Channels, PauseEvent, ThreadSource.Token))
-                        .UnsafeStart();
+                    var thread = new Thread(() => CpuWorker.DoWork(tid, queue, Channels, PauseEvent, ThreadSource.Token));
+
+                    //thread.Priority = ThreadPriority.Highest;
+                    thread.UnsafeStart();
 
                     Workers.Add(queue); 
                 }

@@ -24,11 +24,14 @@
 */
 
 #pragma once
+
+#ifdef WIN32
 #pragma comment(lib, "crypt32")
 #pragma comment(lib, "ws2_32.lib")
 #pragma comment(lib, "advapi32.lib")
 #pragma comment(lib, "User32.lib")
 #pragma comment(lib, "shell32.lib")
+#endif
 
 #include <stdio.h>
 #include <stdint.h>
@@ -179,10 +182,10 @@ typedef struct pf_salt
 #define shr(x,n) (x >> n)
 #define shl(x,n) (x << n)
 
-//#ifdef WIN32
-//#define EXPORT_DLL extern "C" __declspec(dllexport)
-//#else
+#ifdef WIN32
+#define EXPORT_DLL extern "C" __declspec(dllexport)
+#else
 #define EXPORT_DLL extern "C"
-//#endif
+#endif
 
 EXPORT_DLL int pf_newhash(const char *pass, const size_t pass_sz, const size_t cost_t, const size_t cost_m, char *hash);
