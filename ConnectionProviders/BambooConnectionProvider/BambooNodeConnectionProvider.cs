@@ -28,7 +28,7 @@ namespace dcrpt_miner
         public ILoggerFactory LoggerFactory { get; }
 
         private CancellationTokenSource ThreadSource = new CancellationTokenSource();
-        private static SpinLock SpinLock = new SpinLock();
+        SemaphoreSlim _lock = new SemaphoreSlim(1,1);
 
         private Block CurrentBlock { get; set; }
         private string Url { get; set; }
@@ -104,15 +104,23 @@ namespace dcrpt_miner
                 stream.Flush();
                 stream.Position = 0;
 
-                if (await Node.Submit(stream)) {
-                    await Channels.Jobs.Writer.WriteAsync(new Job {
-                        Type = JobType.STOP
-                    });
+                await _lock.WaitAsync();
 
-                    return SubmitResult.ACCEPTED;
+                try {
+                    if (await Node.Submit(stream)) {
+                        await Channels.Jobs.Writer.WriteAsync(new Job {
+                            Type = JobType.STOP
+                        });
+
+                        return SubmitResult.ACCEPTED;
+                    }
+
+                    return SubmitResult.REJECTED;
+                } catch (Exception ex) {
+                    throw new Exception("Submit failed", ex);
+                } finally {
+                    _lock.Release();
                 }
-
-                return SubmitResult.REJECTED;
             }
         }
 
@@ -126,7 +134,7 @@ namespace dcrpt_miner
             double miningTime = TimeSpan.FromMinutes(60).TotalSeconds;
             var devFeeSeconds = (int)(miningTime * devFee);
 
-            while (!cancellationToken.IsCancellationRequested)
+            /*while (!cancellationToken.IsCancellationRequested)
             {
                 SafeConsole.WriteLine(ConsoleColor.DarkCyan, "{0:T}: Starting dev fee for {1} seconds", DateTime.Now, devFeeSeconds);
                 
@@ -141,7 +149,7 @@ namespace dcrpt_miner
                 SafeConsole.WriteLine(ConsoleColor.DarkCyan, "{0:T}: Dev fee stopped", DateTime.Now);
 
                 cancellationToken.WaitHandle.WaitOne(TimeSpan.FromSeconds(miningTime - devFeeSeconds));
-            }
+            }*/
         }
 
         private async Task HandleConnection(CancellationToken cancellationToken)
@@ -190,8 +198,6 @@ namespace dcrpt_miner
                         continue;
                     }
 
-                    currentId = newId;
-
                     var problem = await Node.GetMiningProblem();
                     if (!problem.success)
                     {
@@ -220,6 +226,8 @@ namespace dcrpt_miner
                     retryCount = 0;
 
                      CreateBlockAndAnnounceJob(newId + 1, JobType.NEW, problem.data, transactions.data);
+
+                    currentId = newId;
                 }
                 catch (Exception ex)
                 {
@@ -233,10 +241,9 @@ namespace dcrpt_miner
 
         private void CreateBlockAndAnnounceJob(uint blockId, JobType jobType, MiningProblem problem, List<Transaction> transactions)
         {
-            bool lockTaken = false;
+            _lock.Wait();
 
             try {
-                SpinLock.Enter(ref lockTaken);
 
                 using (var sha256 = SHA256.Create())
                 using (var stream = new MemoryStream())
@@ -271,6 +278,8 @@ namespace dcrpt_miner
                         Problem = problem
                     };
 
+                    Console.WriteLine(blockId);
+
                     Channels.Jobs.Writer.WriteAsync(new Job {
                         Type = jobType,
                         Name = JobName,
@@ -283,9 +292,7 @@ namespace dcrpt_miner
             catch (Exception ex) {
                 throw new Exception("CreateBlock failed", ex);
             } finally {
-                if (lockTaken) {
-                    SpinLock.Exit(false);
-                }
+                _lock.Release();
             }
         }
 

@@ -31,16 +31,5 @@ namespace dcrpt_miner
                algo.DoCPUWork(id, job, channels, pauseEvent, token);
             }
         }
-
-        // TODO: Move to util class
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static unsafe bool checkLeadingZeroBits(byte* hash, int challengeSize, int challengeBytes, int remainingBits) {
-            for (int i = 0; i < challengeBytes; i++) {
-                if (hash[i] != 0) return false;
-            }
-
-            if (remainingBits > 0) return hash[challengeBytes]>>(8-remainingBits) == 0;
-            else return true;
-        }
     }
 }
