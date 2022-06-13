@@ -124,7 +124,8 @@ namespace dcrpt_miner
 
             var sb = new StringBuilder();
             sb.AppendLine("|---------------------------------------|");
-            sb.AppendFormat("| Periodic Report - {0}{1}|{2}", AlgoName, AlgoName == "n/a" ? "\t\t\t" : "\t", Environment.NewLine);
+            // FIXME: hack to get alignment correct
+            sb.AppendFormat("| Periodic Report - {0}{1}|{2}", AlgoName, AlgoName == "n/a" ? "\t\t\t" : AlgoName == "sha256bmb" ? "\t\t" : "\t", Environment.NewLine);
             sb.AppendLine("|---------------------------------------|");
             sb.AppendFormat("| Accepted \t\t{0}\t\t|{1}", Interlocked.Read(ref AcceptedShares), Environment.NewLine);
             sb.AppendFormat("| Dropped \t\t{0}\t\t|{1}", Interlocked.Read(ref DroppedShares), Environment.NewLine);
@@ -175,6 +176,12 @@ namespace dcrpt_miner
 | S     Print stats                     |
 |---------------------------------------|";
             SafeConsole.WriteLine(ConsoleColor.White, helpMsg);
+        }
+
+        public static void RegisterAlgorith(IAlgorithm algo)
+        {
+            AlgoName = algo.Name;
+            HashrateSnapshots.Clear();
         }
 
         private static void CollectHashrateSnapshot()

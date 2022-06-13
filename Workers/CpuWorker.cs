@@ -15,21 +15,6 @@ namespace dcrpt_miner
 {
     public static class CpuWorker 
     {
-        private static RandomNumberGenerator _global = RandomNumberGenerator.Create();
 
-        public static unsafe void DoWork(uint id, BlockingCollection<Job> queue, Channels channels, ManualResetEvent pauseEvent, CancellationToken token)
-        {
-            IAlgorithm algo = null;
-
-            while(!token.IsCancellationRequested) {
-                var job = queue.Take(token);
-
-                if (algo == null || algo.GetType() != job.Algorithm) {
-                    algo = (IAlgorithm)Activator.CreateInstance(job.Algorithm);
-                }
-
-               algo.DoCPUWork(id, job, channels, pauseEvent, token);
-            }
-        }
     }
 }

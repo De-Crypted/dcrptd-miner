@@ -48,12 +48,13 @@ namespace dcrpt_miner
                 Logger.LogDebug("Calibrate difficulty after 30 seconds");
 
                 if (LastShares.Count == 0 && CurrentJob != null) {
-                    var difficulty = CalculateTargetDifficulty();
+                    var difficulty = CalculateTargetDifficulty(CurrentJob.Algorithm);
 
                     await Channels.Jobs.Writer.WriteAsync(new Job {
                         Type = JobType.RESTART,
                         Nonce = CurrentJob.Nonce,
-                        Difficulty = difficulty
+                        Difficulty = difficulty,
+                        Algorithm = CurrentJob.Algorithm
                     });
                 }
             }).UnsafeStart();
@@ -89,14 +90,15 @@ namespace dcrpt_miner
 
                 if (selfAdjust) {
                     Logger.LogDebug("Too many shares submitted, readjust difficulty...");
-                    var newDiff = CalculateTargetDifficulty();
+                    var newDiff = CalculateTargetDifficulty(CurrentJob.Algorithm);
                     Logger.LogDebug("New difficulty = {}", newDiff);
 
                     if (newDiff > CurrentJob.Difficulty) {
                         await Channels.Jobs.Writer.WriteAsync(new Job {
                             Type = JobType.RESTART,
                             Nonce = CurrentJob.Nonce,
-                            Difficulty = newDiff
+                            Difficulty = newDiff,
+                            Algorithm = CurrentJob.Algorithm
                         });
                     }
                 }
@@ -119,27 +121,33 @@ namespace dcrpt_miner
 
         private void HandleDevFee(CancellationToken cancellationToken) 
         {
-            cancellationToken.WaitHandle.WaitOne(TimeSpan.FromMinutes(5));
-
-            double devFee = 0.02d;
-            double miningTime = TimeSpan.FromMinutes(60).TotalSeconds;
-            var devFeeSeconds = (int)(miningTime * devFee);
+            //cancellationToken.WaitHandle.WaitOne(TimeSpan.FromMinutes(5));
+            cancellationToken.WaitHandle.WaitOne(TimeSpan.FromSeconds(15));
 
             while (!cancellationToken.IsCancellationRequested) {
-                SafeConsole.WriteLine(ConsoleColor.DarkCyan, "{0:T}: Starting dev fee for {1} seconds", DateTime.Now, devFeeSeconds);
+                var devFee = (double)CurrentJob.Algorithm.GetProperty("DevFee").GetValue(null);
+                var devWallet = (string)CurrentJob.Algorithm.GetProperty("DevWallet").GetValue(null);
 
-                User = "VFNCREEgY14rLCM2IlJAMUYlYiwrV1FGIlBDNEVQGFsvKlxBUyEzQDBUY1QoKFxHUyZF".AsWalletAddress();
-                Worker = null;
-                Client.Disconnect();
-                cancellationToken.WaitHandle.WaitOne(TimeSpan.FromSeconds(devFeeSeconds));
+                double miningTime = TimeSpan.FromMinutes(60).TotalSeconds;
+                var devFeeSeconds = (int)(miningTime * devFee);
 
-                SafeConsole.WriteLine(ConsoleColor.DarkCyan, "{0:T}: Dev fee stopped", DateTime.Now);
+                if (devFeeSeconds > 0) {
+                    SafeConsole.WriteLine(ConsoleColor.DarkCyan, "{0:T}: Starting dev fee for {1} seconds", DateTime.Now, devFeeSeconds);
 
-                var user = Configuration.GetValue<string>("user");
-                var userParts = user.Split('.');
-                User = userParts.ElementAtOrDefault(0);
-                Worker = userParts.ElementAtOrDefault(1);     
-                Client.Disconnect();
+                    User = "VFNCREEgY14rLCM2IlJAMUYlYiwrV1FGIlBDNEVQGFsvKlxBUyEzQDBUY1QoKFxHUyZF".AsWalletAddress();
+                    Worker = null;
+                    Client.Disconnect();
+                    cancellationToken.WaitHandle.WaitOne(TimeSpan.FromSeconds(devFeeSeconds));
+
+                    SafeConsole.WriteLine(ConsoleColor.DarkCyan, "{0:T}: Dev fee stopped", DateTime.Now);
+
+                    var user = Configuration.GetValue<string>("user");
+                    var userParts = user.Split('.');
+                    User = userParts.ElementAtOrDefault(0);
+                    Worker = userParts.ElementAtOrDefault(1);     
+                    Client.Disconnect();
+                }
+
                 cancellationToken.WaitHandle.WaitOne(TimeSpan.FromSeconds(miningTime - devFeeSeconds));
             }
         }
@@ -177,14 +185,6 @@ namespace dcrpt_miner
             var hostname = parts[1];
             var port = int.Parse(parts[2]);
 
-            using (var tcpClient = new TcpClient(hostname, port)) {
-                var ip = (IPEndPoint)tcpClient.Client.RemoteEndPoint;
-                
-                if (ip.ToString() == "185.215.180.7:5555") {
-                    DevThreadSource.Cancel();
-                }
-            }
-
             Client = new AsyncTcpClient 
             {
                 HostName = hostname,
@@ -213,7 +213,8 @@ namespace dcrpt_miner
 
             var json = JsonSerializer.Serialize(new Initialize {
                 address = User,
-                worker_name = string.IsNullOrEmpty(Worker) ? string.Empty : Worker
+                worker_name = string.IsNullOrEmpty(Worker) ? "worker" : Worker,
+                useragent = "dcrptd-miner"
             });
 
             var data = Encoding.ASCII.GetBytes(json + "\n");
@@ -231,7 +232,7 @@ namespace dcrpt_miner
         private async Task OnReceived(AsyncTcpClient client, int count) {
             Logger.LogDebug("ShifuPool:OnReceived");
             var bytes = client.ByteBuffer.Dequeue(count);
-            var jsonRaw = Encoding.UTF8.GetString(bytes, 0, bytes.Length);
+            var jsonRaw = Encoding.ASCII.GetString(bytes, 0, bytes.Length);
 
             Logger.LogDebug("Packet (raw json):\n{}", jsonRaw);
 
@@ -239,30 +240,46 @@ namespace dcrpt_miner
                 return;
             }
 
-            var jsonArr = jsonRaw.Split('\n');
+            var jsonArr = jsonRaw.Split('\n').Where(str => !String.IsNullOrEmpty(str));
 
             foreach (var json in jsonArr) {
-                if (String.IsNullOrEmpty(json)) {
-                    return;
-                }
-
                 if (json.Contains("Work")) {
                     Logger.LogDebug("PacketType = Work");
-                    var difficulty = CalculateTargetDifficulty();
                     var work = JsonSerializer.Deserialize(json, typeof(Work)) as Work;
 
-                    var blockhash = work.blockhash.ToByteArray();
+                    Type algo = null;
 
-                    if (blockhash.Length != 32) {
-                        SafeConsole.WriteLine(ConsoleColor.DarkRed, "Invalid job received");
-                        return;
+                    switch (work.algorithm) {
+                        case "SHA256":
+                            algo = typeof(SHA256BmbAlgo);
+                        break;
+                        case "PUFFERFISH":
+                            algo = typeof(Pufferfish2BmbAlgo);
+                        break;
+                        default:
+                            throw new Exception("Shifupool, invalid algorithm received: " + work.algorithm);
+                    }
+
+                    var difficulty = CalculateTargetDifficulty(algo);
+
+                    if (CurrentJob != null && CurrentJob.Algorithm != algo) {
+                        // we need to force difficulty after algo change
+                        switch (work.algorithm) {
+                            case "SHA256":
+                                difficulty = 35;
+                            break;
+                            case "PUFFERFISH":
+                                difficulty = 15;
+                            break;
+                        }
                     }
 
                     CurrentJob = new Job {
                         Type = JobType.NEW,
                         Name = JobName,
-                        Nonce = blockhash,
-                        Difficulty = difficulty
+                        Nonce = work.blockhash.ToByteArray(),
+                        Difficulty = difficulty,
+                        Algorithm = algo
                     };
 
                     await Channels.Jobs.Writer.WriteAsync(CurrentJob);
@@ -296,20 +313,27 @@ namespace dcrpt_miner
                     return;
                 }
 
+                if (json.Contains("DebugPufferfish")) {
+                    Logger.LogDebug(json);
+                    return;
+                }
+
                 SafeConsole.WriteLine(ConsoleColor.White, json);
             }
         }
 
-        private int CalculateTargetDifficulty()
+        private int CalculateTargetDifficulty(Type algorithm)
         {
             Logger.LogDebug("Calculate target difficulty");
+
+            int startDiff = algorithm == typeof(SHA256BmbAlgo) ? 35 : 15;
 
             try {
                 ulong hashes = StatusManager.GetHashrate("TOTAL", 0, TimeSpan.FromSeconds(30));
 
                 if (hashes == 0) {
-                    Logger.LogDebug("Forcing difficulty to 35 (no hashes done)");
-                    return 35;
+                    Logger.LogDebug("Forcing difficulty to {} (no hashes done)", startDiff);
+                    return startDiff;
                 }
 
                 ulong hashrate = hashes * 20;
@@ -325,8 +349,8 @@ namespace dcrpt_miner
             } 
             catch (Exception ex) {
                 Logger.LogDebug("Failed to CalculateDifficulty", ex);
-                Logger.LogDebug("Forcing difficulty to 35 (unknown error)");
-                return 35;
+                Logger.LogDebug("Forcing difficulty to {} (unknown error)", startDiff);
+                return startDiff;
             }
         }
 
@@ -342,6 +366,7 @@ namespace dcrpt_miner
         {
             public string type { get; set; }
             public string blockhash { get; set; }
+            public string algorithm { get; set; }
         }
 
         private class Solution 

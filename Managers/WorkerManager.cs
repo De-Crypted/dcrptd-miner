@@ -10,6 +10,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using System.Runtime.CompilerServices;
+using Microsoft.AspNetCore.Connections;
 
 namespace dcrpt_miner
 {
@@ -65,62 +66,7 @@ namespace dcrpt_miner
 
         private async Task JobHandler(CancellationToken token)
         {
-            var threads = 1;
-            var cpuEnabled = Configuration.GetValue<bool>("cpu:enabled");
-            var gpuEnabled = Configuration.GetValue<bool>("gpu:enabled");
-
-            if (cpuEnabled) {
-                threads = Configuration.GetValue<int>("cpu:threads");
-
-                if (threads <= 0) {
-                    threads = Environment.ProcessorCount;
-                }
-
-                StatusManager.CpuHashCount = new ulong[threads];
-
-                for (uint i = 0; i < threads; i++) {
-                    var queue = new BlockingCollection<Job>();
-
-                    var tid = i;
-                    Logger.LogDebug("Starting CpuWorker[{}] thread", tid);
-                    var thread = new Thread(() => CpuWorker.DoWork(tid, queue, Channels, PauseEvent, ThreadSource.Token));
-
-                    //thread.Priority = ThreadPriority.Highest;
-                    thread.UnsafeStart();
-
-                    Workers.Add(queue); 
-                }
-            }
-
-            if (gpuEnabled) {
-                var gpuDevices = GpuWorker.QueryDevices(Configuration, LoggerFactory);
-
-                var gpuConfig = Configuration.GetValue<string>("gpu:device");
-                if (string.IsNullOrEmpty(gpuConfig)) {
-                    gpuConfig = "0";
-                }
-                var selectedGpus = gpuConfig.Split(',');
-
-                StatusManager.GpuHashCount = new ulong[selectedGpus.Length];
-
-                for (uint i = 0; i < selectedGpus.Length; i++) {
-                    var queue = new BlockingCollection<Job>();
-                    
-                    var byId = int.TryParse(selectedGpus[i], out var deviceId);
-                    var gpu = byId ? gpuDevices.Find(g => g.Id == deviceId) : gpuDevices.Find(g => g.DeviceName == selectedGpus[i]);
-
-                    if (gpu == null) {
-                        continue;
-                    }
-
-                    var tid = i;
-                    Logger.LogDebug("Starting GpuWorker[{}] thread for gpu id: {}, name: {}", tid, gpu.Id, gpu.DeviceName);
-                    new Thread(() => GpuWorker.DoWork(tid, gpu, queue, Channels, PauseEvent, Configuration, LoggerFactory.CreateLogger<GpuWorker>(), ThreadSource.Token))
-                        .UnsafeStart();
-
-                    Workers.Add(queue);
-                }
-            }
+            IAlgorithm algo = null;
 
             Logger.LogDebug("Waiting for job");
             await foreach(var job in Channels.Jobs.Reader.ReadAllAsync(ThreadSource.Token)) {
@@ -133,25 +79,28 @@ namespace dcrpt_miner
                     continue;
                 }
 
+                if (algo == null || algo.GetType() != job.Algorithm) {
+                    if (algo != null) {
+                        algo.Dispose();
+                    }
+
+                    algo = (IAlgorithm)Activator.CreateInstance(job.Algorithm);
+                    algo.Initialize(LoggerFactory.CreateLogger(algo.GetType()), Channels, PauseEvent);
+
+                    SafeConsole.WriteLine(ConsoleColor.DarkGray, "Algorithm: {0}", algo.Name);
+                    StatusManager.RegisterAlgorith(algo);
+                }
+
                 if (job.Type == JobType.NEW) {
                     Console.ForegroundColor = ConsoleColor.DarkYellow;
                     Console.WriteLine("{0:T}: New {1} (diff {2})", DateTime.Now, job.Name, job.Difficulty);
                     Console.ResetColor();
                 }
 
-                StatusManager.AlgoName = (string)job.Algorithm.GetProperty("Name").GetValue(null);
-
+                job.CancellationToken = TokenSource.Token;
                 Logger.LogDebug("Assigning job to workers");
-                Parallel.ForEach(Workers, worker => {
-                    var tjob = new Job {
-                        Nonce = job.Nonce,
-                        Difficulty = job.Difficulty,
-                        CancellationToken = TokenSource.Token,
-                        Algorithm = job.Algorithm
-                    };
 
-                    worker.Add(tjob);
-                });
+                algo.ExecuteJob(job);
             }
         }
     }

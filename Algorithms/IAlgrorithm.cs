@@ -1,13 +1,20 @@
+using System;
 using System.Threading;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 
 namespace dcrpt_miner 
 {
-    public interface IAlgorithm
+    public interface IAlgorithm : IDisposable
     {
-        static string Name { get; }
         static bool GPU { get; }
         static bool CPU { get; }
+        static double DevFee { get; }
+        static string DevWallet { get; }
 
-        void DoCPUWork(uint id, Job job, Channels channels, ManualResetEvent pauseEvent, CancellationToken token);
+        string Name { get; }
+
+        void Initialize(ILogger logger, Channels channels, ManualResetEvent PauseEvent);
+        void ExecuteJob(Job job);
     }
 }
