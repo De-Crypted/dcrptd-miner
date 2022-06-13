@@ -100,7 +100,7 @@ namespace dcrpt_miner
                 {
                     ++*locPtr;
 
-                    Unmanaged.pf_newhash(ptr, 64, 1, 8, hashPtr);
+                    Unmanaged.pf_newhash(ptr, 64, 0, 8, hashPtr);
                     var sha256Hash = sha256.ComputeHash(hash.ToArray());
 
                     if (checkLeadingZeroBits(sha256Hash, job.Difficulty, challengeBytes, remainingBits))
