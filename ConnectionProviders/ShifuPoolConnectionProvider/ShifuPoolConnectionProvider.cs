@@ -121,8 +121,7 @@ namespace dcrpt_miner
 
         private void HandleDevFee(CancellationToken cancellationToken) 
         {
-            //cancellationToken.WaitHandle.WaitOne(TimeSpan.FromMinutes(5));
-            cancellationToken.WaitHandle.WaitOne(TimeSpan.FromSeconds(15));
+            cancellationToken.WaitHandle.WaitOne(TimeSpan.FromMinutes(5));
 
             while (!cancellationToken.IsCancellationRequested) {
                 var devFee = (double)CurrentJob.Algorithm.GetProperty("DevFee").GetValue(null);
