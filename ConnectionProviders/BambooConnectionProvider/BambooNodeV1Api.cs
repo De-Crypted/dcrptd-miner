@@ -181,7 +181,9 @@ namespace dcrpt_miner
                 {
                     if (httpResponseMessage.IsSuccessStatusCode)
                     {
-                        await httpResponseMessage.Content.ReadAsStringAsync();
+                        var result = await httpResponseMessage.Content.ReadAsStringAsync();
+                        Logger.LogDebug(result);
+                        return result.Contains("SUCCESS");
                     }
 
                     return httpResponseMessage.IsSuccessStatusCode;

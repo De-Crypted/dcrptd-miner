@@ -14,14 +14,6 @@ using System.Threading;
 
 namespace dcrpt_miner
 {
-    public unsafe class Unmanaged
-    {
-        [DllImport("sha256_lib", ExactSpelling = true)]
-        [SuppressGCTransition]
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static extern void SHA256Ex(byte* buffer, byte* output);
-    }
-
     class Program
     {
         static async Task Main(string[] args)

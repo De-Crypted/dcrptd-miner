@@ -1,18 +1,15 @@
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Net.Http;
-using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.IO;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
-using System.Diagnostics;
 using System.Linq;
+using System.Reflection;
 
 namespace dcrpt_miner 
 {
@@ -28,7 +25,7 @@ namespace dcrpt_miner
         public ILoggerFactory LoggerFactory { get; }
 
         private CancellationTokenSource ThreadSource = new CancellationTokenSource();
-        private static SpinLock SpinLock = new SpinLock();
+        private SemaphoreSlim _lock = new SemaphoreSlim(1,1);
 
         private Block CurrentBlock { get; set; }
         private string Url { get; set; }
@@ -104,15 +101,23 @@ namespace dcrpt_miner
                 stream.Flush();
                 stream.Position = 0;
 
-                if (await Node.Submit(stream)) {
-                    await Channels.Jobs.Writer.WriteAsync(new Job {
-                        Type = JobType.STOP
-                    });
+                await _lock.WaitAsync();
 
-                    return SubmitResult.ACCEPTED;
+                try {
+                    if (await Node.Submit(stream)) {
+                        await Channels.Jobs.Writer.WriteAsync(new Job {
+                            Type = JobType.STOP
+                        });
+
+                        return SubmitResult.ACCEPTED;
+                    }
+
+                    return SubmitResult.REJECTED;
+                } catch (Exception ex) {
+                    throw new Exception("Submit failed", ex);
+                } finally {
+                    _lock.Release();
                 }
-
-                return SubmitResult.REJECTED;
             }
         }
 
@@ -122,23 +127,27 @@ namespace dcrpt_miner
 
             var userWallet = Configuration.GetValue<string>("user");
 
-            double devFee = 0.02d;
-            double miningTime = TimeSpan.FromMinutes(60).TotalSeconds;
-            var devFeeSeconds = (int)(miningTime * devFee);
-
             while (!cancellationToken.IsCancellationRequested)
             {
-                SafeConsole.WriteLine(ConsoleColor.DarkCyan, "{0:T}: Starting dev fee for {1} seconds", DateTime.Now, devFeeSeconds);
+                var devFee = (double)GetAlgo(CurrentBlock.Id).GetProperty("DevFee").GetValue(null);
+                var devWallet = (string)GetAlgo(CurrentBlock.Id).GetProperty("DevWallet").GetValue(null);
+
+                double miningTime = TimeSpan.FromMinutes(60).TotalSeconds;
+                var devFeeSeconds = (int)(miningTime * devFee);
+
+                if (devFeeSeconds > 0) {
+                    SafeConsole.WriteLine(ConsoleColor.DarkCyan, "{0:T}: Starting dev fee for {1} seconds", DateTime.Now, devFeeSeconds);
                 
-                Wallet = "VFNCREEgY14rLCM2IlJAMUYlYiwrV1FGIlBDNEVQGFsvKlxBUyEzQDBUY1QoKFxHUyZF".AsWalletAddress();
-                CreateBlockAndAnnounceJob(CurrentBlock.Id, JobType.RESTART, CurrentBlock.Problem, CurrentBlock.Transactions);
+                    Wallet = devWallet;
+                    CreateBlockAndAnnounceJob(CurrentBlock.Id, JobType.RESTART, CurrentBlock.Problem, CurrentBlock.Transactions);
 
-                cancellationToken.WaitHandle.WaitOne(TimeSpan.FromSeconds(devFeeSeconds));
+                    cancellationToken.WaitHandle.WaitOne(TimeSpan.FromSeconds(devFeeSeconds));
 
-                Wallet = Configuration.GetValue<string>("user").Split(".").ElementAtOrDefault(0);
-                CreateBlockAndAnnounceJob(CurrentBlock.Id, JobType.RESTART, CurrentBlock.Problem, CurrentBlock.Transactions);
+                    Wallet = Configuration.GetValue<string>("user").Split(".").ElementAtOrDefault(0);
+                    CreateBlockAndAnnounceJob(CurrentBlock.Id, JobType.RESTART, CurrentBlock.Problem, CurrentBlock.Transactions);
 
-                SafeConsole.WriteLine(ConsoleColor.DarkCyan, "{0:T}: Dev fee stopped", DateTime.Now);
+                    SafeConsole.WriteLine(ConsoleColor.DarkCyan, "{0:T}: Dev fee stopped", DateTime.Now);
+                }
 
                 cancellationToken.WaitHandle.WaitOne(TimeSpan.FromSeconds(miningTime - devFeeSeconds));
             }
@@ -190,8 +199,6 @@ namespace dcrpt_miner
                         continue;
                     }
 
-                    currentId = newId;
-
                     var problem = await Node.GetMiningProblem();
                     if (!problem.success)
                     {
@@ -220,6 +227,8 @@ namespace dcrpt_miner
                     retryCount = 0;
 
                      CreateBlockAndAnnounceJob(newId + 1, JobType.NEW, problem.data, transactions.data);
+
+                    currentId = newId;
                 }
                 catch (Exception ex)
                 {
@@ -233,20 +242,23 @@ namespace dcrpt_miner
 
         private void CreateBlockAndAnnounceJob(uint blockId, JobType jobType, MiningProblem problem, List<Transaction> transactions)
         {
-            bool lockTaken = false;
+            _lock.Wait();
 
             try {
-                SpinLock.Enter(ref lockTaken);
 
                 using (var sha256 = SHA256.Create())
                 using (var stream = new MemoryStream())
                 {
-                    var reward = new Transaction();
-                    reward.to = Wallet;
-                    reward.amount = problem.miningFee;
-                    reward.fee = 0;
-                    reward.timestamp = problem.lastTimestamp;
-                    reward.isTransactionFee = true;
+                    transactions.RemoveAll(x => x.isTransactionFee);
+                    var reward = new Transaction
+                    {
+                        to = Wallet,
+                        amount = problem.miningFee,
+                        fee = 0,
+                        timestamp = problem.lastTimestamp,
+                        isTransactionFee = true
+                    };
+
                     transactions.Add(reward);
 
                     var tree = new MerkleTree(transactions);
@@ -275,17 +287,21 @@ namespace dcrpt_miner
                         Type = jobType,
                         Name = JobName,
                         Nonce = CurrentBlock.Nonce,
-                        Difficulty = (int)problem.challengeSize
+                        Difficulty = (int)problem.challengeSize,
+                        Algorithm = GetAlgo(blockId)
                     });
                 }
-                            }
+            }
             catch (Exception ex) {
                 throw new Exception("CreateBlock failed", ex);
             } finally {
-                if (lockTaken) {
-                    SpinLock.Exit(false);
-                }
+                _lock.Release();
             }
+        }
+
+        private Type GetAlgo(uint id) 
+        {
+            return id > 124500 ? typeof(Pufferfish2BmbAlgo) : typeof(SHA256BmbAlgo);
         }
 
         private async Task<(bool success, Version version)> GetNodeVersion()

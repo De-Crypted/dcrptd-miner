@@ -1,0 +1,6 @@
+{
+    "pufferfish2bmb": {
+        "_threads": "Set amount of threads to run. -1 = auto detect thread count",
+        "threads": -1
+    }
+}

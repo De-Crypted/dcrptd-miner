@@ -23,15 +23,24 @@
     <Content Include="config.json">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
+    <Content Include="config.sha256bmb.json">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="config.pufferfish2bmb.json">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
   <ItemGroup>
-    <Content Include="sha256_lib.dll">
+    <Content Include="Algorithms/sha256bmb/sha256_lib.dll">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
-    <Content Include="sha256_lib.so">
+    <Content Include="Algorithms/sha256bmb/sha256_lib.so">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
-    <Content Include="sha256_pow.cl">
+    <Content Include="Algorithms/sha256bmb/sha256_pow.cl">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Algorithms/pufferfish2bmb/pufferfish2.dll">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
   </ItemGroup>

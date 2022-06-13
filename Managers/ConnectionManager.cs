@@ -123,8 +123,9 @@ namespace dcrpt_miner
 
                         sw.Reset();
                         Logger.LogDebug("Submit done");
-                    } catch (Exception) {
-                        SafeConsole.WriteLine(ConsoleColor.DarkRed, "{0:T}: Failed to submit share (ERR_CONN_FAILED)", DateTime.Now);
+                    } catch (Exception ex) {
+                        SafeConsole.WriteLine(ConsoleColor.DarkRed, "{0:T}: Failed to submit {1} (ERR_CONN_FAILED)", DateTime.Now, CurrentProvider.SolutionName);
+                        Logger.LogDebug(ex, "Failed to submit solution");
                     }
                 }
             } catch(System.OperationCanceledException) {
