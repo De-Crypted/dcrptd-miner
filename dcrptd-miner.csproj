@@ -43,5 +43,8 @@
     <Content Include="Algorithms/pufferfish2bmb/pufferfish2.dll">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
+    <Content Include="Algorithms/pufferfish2bmb/pufferfish2.so">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 </Project>
