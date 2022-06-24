@@ -25,3 +25,7 @@ Linux
 Mac OSX
 
 `dotnet publish -c Release -p:PublishSingleFile=true --self-contained --runtime osx-x64`
+
+Mac OS M1
+
+`./m1.sh clang|gcc`
