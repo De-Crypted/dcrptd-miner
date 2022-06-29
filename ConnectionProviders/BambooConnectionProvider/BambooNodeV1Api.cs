@@ -98,7 +98,7 @@ namespace dcrpt_miner
         {
             try
             {
-                var httpRequestMessage = new HttpRequestMessage(HttpMethod.Get, Url + "/gettx");
+                var httpRequestMessage = new HttpRequestMessage(HttpMethod.Get, Url + "/tx_json");
 
                 using (var httpClient = HttpClientFactory.CreateClient())
                 using (var httpResponseMessage = await httpClient.SendAsync(httpRequestMessage))
@@ -110,53 +110,8 @@ namespace dcrpt_miner
                     {
                         using (var contentStream = await httpResponseMessage.Content.ReadAsStreamAsync())
                         {
-                            byte[] bytes;
-
-                            using (BinaryReader br = new BinaryReader(contentStream))
-                            {
-                                bytes = br.ReadBytes((int)contentStream.Length);
-                            }
-
-                            var txSize = Marshal.SizeOf<TransactionInfo>();
-                            var txCount = bytes.Length / txSize;
-                            for (int i = 0; i < txCount; i++) {
-                                byte[] subBytes = new byte[txSize];
-                                Array.Copy(bytes, i * txSize, subBytes, 0, txSize);
-
-                                GCHandle handle = GCHandle.Alloc(subBytes, GCHandleType.Pinned);
-                                try
-                                {
-                                    TransactionInfo tx = (TransactionInfo)Marshal.PtrToStructure(handle.AddrOfPinnedObject(), typeof(TransactionInfo));
-
-                                    byte[] signature = new byte[64];
-                                    byte[] signingKey = new byte[32];
-                                    byte[] to = new byte [25];
-                                    byte[] from = new byte [25];
-
-                                    unsafe {
-                                        Marshal.Copy((IntPtr)tx.signature, signature, 0, 64);
-                                        Marshal.Copy((IntPtr)tx.signingKey, signingKey, 0, 32);
-                                        Marshal.Copy((IntPtr)tx.to, to, 0, 25);
-                                        Marshal.Copy((IntPtr)tx.from, from, 0, 25);
-                                    }
-
-                                    var transaction = new Transaction {
-                                        signature = signature.AsString(),
-                                        signingKey = signingKey.AsString(),
-                                        timestamp = tx.timestamp.ToString(),
-                                        to = to.AsString(),
-                                        from = from.AsString(),
-                                        amount = tx.amount,
-                                        fee = tx.fee,
-                                        isTransactionFee = tx.isTransactionFee
-                                    };
-
-                                    data.Add(transaction);
-                                }
-                                finally
-                                {
-                                    handle.Free();
-                                }
+                            await foreach (var tx in JsonSerializer.DeserializeAsyncEnumerable<Transaction>(contentStream)) {
+                                data.Add(tx);
                             }
                         }
                     }
@@ -182,7 +137,7 @@ namespace dcrpt_miner
                     if (httpResponseMessage.IsSuccessStatusCode)
                     {
                         var result = await httpResponseMessage.Content.ReadAsStringAsync();
-                        Logger.LogDebug(result);
+                        Logger.LogError(result);
                         return result.Contains("SUCCESS");
                     }
 

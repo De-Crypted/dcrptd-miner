@@ -73,6 +73,7 @@ namespace dcrpt_miner
                         }
 
                         SafeConsole.WriteLine(ConsoleColor.DarkGray, "{0:T}: Disconnected from {1}", DateTime.Now, _url);
+                        CurrentProvider.Dispose();
                     }
 
                     token.WaitHandle.WaitOne(TimeSpan.FromSeconds(5));
@@ -80,6 +81,20 @@ namespace dcrpt_miner
 
                 SafeConsole.WriteLine(ConsoleColor.DarkRed, "{0:T}: Miner shutting down...", DateTime.Now);
                 Process.GetCurrentProcess().Kill();
+            }).UnsafeStart();
+
+            new Thread(async () => {
+                var token = ThreadSource.Token;
+
+                token.WaitHandle.WaitOne(TimeSpan.FromMinutes(5));
+
+                while (!token.IsCancellationRequested) {
+                    if (CurrentProvider != null) {
+                        await CurrentProvider.RunDevFeeAsync(token);
+                    }
+
+                    token.WaitHandle.WaitOne(TimeSpan.FromMinutes(60));
+                }
             }).UnsafeStart();
 
             return Task.CompletedTask;
@@ -125,7 +140,7 @@ namespace dcrpt_miner
                         Logger.LogDebug("Submit done");
                     } catch (Exception ex) {
                         SafeConsole.WriteLine(ConsoleColor.DarkRed, "{0:T}: Failed to submit {1} (ERR_CONN_FAILED)", DateTime.Now, CurrentProvider.SolutionName);
-                        Logger.LogDebug(ex, "Failed to submit solution");
+                        Logger.LogError(ex, "Failed to submit solution");
                     }
                 }
             } catch(System.OperationCanceledException) {
@@ -151,6 +166,7 @@ namespace dcrpt_miner
 
     public enum RetryAction {
         RETRY,
-        SHUTDOWN
+        SHUTDOWN,
+        EXIT
     }
 }

@@ -7,8 +7,6 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Configuration;
 using Unclassified.Net;
 using Microsoft.Extensions.Logging;
-using System.Net;
-using System.Net.Sockets;
 using System.Linq;
 
 namespace dcrpt_miner 
@@ -22,8 +20,7 @@ namespace dcrpt_miner
         private Channels Channels { get; }
         private ILogger<ShifuPoolConnectionProvider> Logger { get; }
         private CancellationTokenSource ThreadSource = new CancellationTokenSource();
-        private CancellationTokenSource DevThreadSource = new CancellationTokenSource();
-        private BlockingCollection<Response> Results = new BlockingCollection<Response>(1);
+        private BlockingCollection<Response> Results = new BlockingCollection<Response>();
         private AsyncTcpClient Client { get; set; }
         private ConcurrentQueue<DateTime> LastShares = new ConcurrentQueue<DateTime>();
         private Job CurrentJob { get; set; }
@@ -31,6 +28,10 @@ namespace dcrpt_miner
         private string Worker { get; set; }
         private string Url { get; set; }
         private uint RetryCount { get; set; }
+        private bool disposedValue;
+        private bool DevFeeRunning { get; set; }
+        private bool DevFeeStopping { get; set; }
+
         public ShifuPoolConnectionProvider(IConfiguration configuration, Channels channels, ILogger<ShifuPoolConnectionProvider> logger)
         {
             Configuration = configuration ?? throw new System.ArgumentNullException(nameof(configuration));
@@ -47,6 +48,10 @@ namespace dcrpt_miner
                 ThreadSource.Token.WaitHandle.WaitOne(TimeSpan.FromSeconds(30));
                 Logger.LogDebug("Calibrate difficulty after 30 seconds");
 
+                if (ThreadSource.IsCancellationRequested) {
+                    return;
+                }
+
                 if (LastShares.Count == 0 && CurrentJob != null) {
                     var difficulty = CalculateTargetDifficulty(CurrentJob.Algorithm);
 
@@ -59,10 +64,48 @@ namespace dcrpt_miner
                 }
             }).UnsafeStart();
 
-            new Thread(() => HandleDevFee(DevThreadSource.Token))
-                .UnsafeStart();
-
             return HandleConnection(ThreadSource.Token);
+        }
+
+        public Task RunDevFeeAsync(CancellationToken cancellationToken)
+        {
+            var devFee = (double)CurrentJob.Algorithm.GetProperty("DevFee").GetValue(null);
+            var devWallet = (string)CurrentJob.Algorithm.GetProperty("DevWallet").GetValue(null);
+
+            double miningTime = TimeSpan.FromMinutes(60).TotalSeconds;
+            var devFeeSeconds = (int)(miningTime * devFee);
+
+            if (devFeeSeconds <= 0) {
+                return Task.CompletedTask;
+            }
+            
+            SafeConsole.WriteLine(ConsoleColor.DarkCyan, "{0:T}: Starting dev fee for {1} seconds", DateTime.Now, devFeeSeconds);
+
+            if (cancellationToken.IsCancellationRequested) {
+                return Task.CompletedTask;
+            }
+
+            User = "VFNCREEgY14rLCM2IlJAMUYlYiwrV1FGIlBDNEVQGFsvKlxBUyEzQDBUY1QoKFxHUyZF".AsWalletAddress();
+            Worker = null;
+            DevFeeRunning = true;
+            Client.Disconnect();
+            cancellationToken.WaitHandle.WaitOne(TimeSpan.FromSeconds(devFeeSeconds));
+
+            SafeConsole.WriteLine(ConsoleColor.DarkCyan, "{0:T}: Dev fee stopped", DateTime.Now);
+
+            var user = Configuration.GetValue<string>("user");
+            var userParts = user.Split('.');
+            User = userParts.ElementAtOrDefault(0);
+            Worker = userParts.ElementAtOrDefault(1);
+
+            if (cancellationToken.IsCancellationRequested) {
+                return Task.CompletedTask;
+            }
+
+            DevFeeStopping = true;
+            Client.Disconnect();
+
+            return Task.CompletedTask;
         }
 
         public async Task<SubmitResult> SubmitAsync(byte[] solution)
@@ -119,38 +162,6 @@ namespace dcrpt_miner
             return SubmitResult.REJECTED;
         }
 
-        private void HandleDevFee(CancellationToken cancellationToken) 
-        {
-            cancellationToken.WaitHandle.WaitOne(TimeSpan.FromMinutes(5));
-
-            while (!cancellationToken.IsCancellationRequested) {
-                var devFee = (double)CurrentJob.Algorithm.GetProperty("DevFee").GetValue(null);
-                var devWallet = (string)CurrentJob.Algorithm.GetProperty("DevWallet").GetValue(null);
-
-                double miningTime = TimeSpan.FromMinutes(60).TotalSeconds;
-                var devFeeSeconds = (int)(miningTime * devFee);
-
-                if (devFeeSeconds > 0) {
-                    SafeConsole.WriteLine(ConsoleColor.DarkCyan, "{0:T}: Starting dev fee for {1} seconds", DateTime.Now, devFeeSeconds);
-
-                    User = "VFNCREEgY14rLCM2IlJAMUYlYiwrV1FGIlBDNEVQGFsvKlxBUyEzQDBUY1QoKFxHUyZF".AsWalletAddress();
-                    Worker = null;
-                    Client.Disconnect();
-                    cancellationToken.WaitHandle.WaitOne(TimeSpan.FromSeconds(devFeeSeconds));
-
-                    SafeConsole.WriteLine(ConsoleColor.DarkCyan, "{0:T}: Dev fee stopped", DateTime.Now);
-
-                    var user = Configuration.GetValue<string>("user");
-                    var userParts = user.Split('.');
-                    User = userParts.ElementAtOrDefault(0);
-                    Worker = userParts.ElementAtOrDefault(1);     
-                    Client.Disconnect();
-                }
-
-                cancellationToken.WaitHandle.WaitOne(TimeSpan.FromSeconds(miningTime - devFeeSeconds));
-            }
-        }
-
         private async Task HandleConnection(CancellationToken cancellationToken) {
             Logger.LogDebug("Register connection handler");
             var user = Configuration.GetValue<string>("user");
@@ -194,7 +205,13 @@ namespace dcrpt_miner
                 ClosedCallback = OnClosed
             };
 
-            Client.Message += (s, a) => SafeConsole.WriteLine(ConsoleColor.DarkGray, a.Message);
+            Client.Message += (s, a) => {
+                if (DevFeeRunning) {
+                    Logger.LogDebug(a.Message);
+                } else {
+                    SafeConsole.WriteLine(ConsoleColor.DarkGray, a.Message);
+                }
+            };
 
             var retries = Configuration.GetValue<uint?>("retries", 5);
 
@@ -203,7 +220,9 @@ namespace dcrpt_miner
                 RetryCount++;
 
                 cancellationToken.WaitHandle.WaitOne(TimeSpan.FromSeconds(1));
-                SafeConsole.WriteLine(ConsoleColor.DarkGray, "{0:T}: Pool connection interrupted, retrying ({1}/{2})...", DateTime.Now, RetryCount, retries);
+                if (!DevFeeRunning) {
+                    SafeConsole.WriteLine(ConsoleColor.DarkGray, "{0:T}: Pool connection interrupted, retrying ({1}/{2})...", DateTime.Now, RetryCount, retries);
+                }
             }
         }
 
@@ -274,6 +293,7 @@ namespace dcrpt_miner
                     }
 
                     CurrentJob = new Job {
+                        Id = work.blockhash.Substring(0, Math.Min(7, work.blockhash.Length)),
                         Type = JobType.NEW,
                         Name = JobName,
                         Nonce = work.blockhash.ToByteArray(),
@@ -290,6 +310,16 @@ namespace dcrpt_miner
                 if (json.Contains("Notification")) {
                     Logger.LogDebug("PacketType = Notification");
                     var notification = JsonSerializer.Deserialize(json, typeof(Notification)) as Notification;
+
+                    if (DevFeeRunning && notification.msg.StartsWith("Hi there!")) {
+                        return;
+                    }
+
+                    if (DevFeeStopping) {
+                        DevFeeStopping = false;
+                        DevFeeRunning = false;
+                    }
+
                     SafeConsole.WriteLine(ConsoleColor.DarkMagenta, notification.msg);
                     return;
                 }
@@ -394,6 +424,26 @@ namespace dcrpt_miner
         private class Pong 
         {
             public string type { get; set; } = "Pong";
+        }
+
+        protected virtual void Dispose(bool disposing)
+        {
+            if (!disposedValue)
+            {
+                if (disposing)
+                {
+                    Client.Dispose();
+                    ThreadSource.Cancel();
+                }
+
+                disposedValue = true;
+            }
+        }
+
+        public void Dispose()
+        {
+            Dispose(disposing: true);
+            GC.SuppressFinalize(this);
         }
     }
 }

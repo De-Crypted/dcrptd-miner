@@ -26,6 +26,7 @@ namespace dcrpt_miner
 
         private CancellationTokenSource ThreadSource = new CancellationTokenSource();
         private SemaphoreSlim _lock = new SemaphoreSlim(1,1);
+        private bool disposedValue;
 
         private Block CurrentBlock { get; set; }
         private string Url { get; set; }
@@ -47,9 +48,6 @@ namespace dcrpt_miner
 
             Url = url.Replace("bamboo://", "http://");
             Wallet = Configuration.GetValue<string>("user").Split(".").ElementAtOrDefault(0);
-
-            new Thread(() => HandleDevFee(ThreadSource.Token))
-                .UnsafeStart();
 
             return HandleConnection(ThreadSource.Token);
         }
@@ -121,36 +119,41 @@ namespace dcrpt_miner
             }
         }
 
-        private void HandleDevFee(CancellationToken cancellationToken)
+        public Task RunDevFeeAsync(CancellationToken cancellationToken)
         {
-            cancellationToken.WaitHandle.WaitOne(TimeSpan.FromMinutes(5));
-
             var userWallet = Configuration.GetValue<string>("user");
 
-            while (!cancellationToken.IsCancellationRequested)
-            {
-                var devFee = (double)GetAlgo(CurrentBlock.Id).GetProperty("DevFee").GetValue(null);
-                var devWallet = (string)GetAlgo(CurrentBlock.Id).GetProperty("DevWallet").GetValue(null);
+            var devFee = (double)GetAlgo(CurrentBlock.Id).GetProperty("DevFee").GetValue(null);
+            var devWallet = (string)GetAlgo(CurrentBlock.Id).GetProperty("DevWallet").GetValue(null);
 
-                double miningTime = TimeSpan.FromMinutes(60).TotalSeconds;
-                var devFeeSeconds = (int)(miningTime * devFee);
+            double miningTime = TimeSpan.FromMinutes(60).TotalSeconds;
+            var devFeeSeconds = (int)(miningTime * devFee);
 
-                if (devFeeSeconds > 0) {
-                    SafeConsole.WriteLine(ConsoleColor.DarkCyan, "{0:T}: Starting dev fee for {1} seconds", DateTime.Now, devFeeSeconds);
-                
-                    Wallet = devWallet;
-                    CreateBlockAndAnnounceJob(CurrentBlock.Id, JobType.RESTART, CurrentBlock.Problem, CurrentBlock.Transactions);
-
-                    cancellationToken.WaitHandle.WaitOne(TimeSpan.FromSeconds(devFeeSeconds));
-
-                    Wallet = Configuration.GetValue<string>("user").Split(".").ElementAtOrDefault(0);
-                    CreateBlockAndAnnounceJob(CurrentBlock.Id, JobType.RESTART, CurrentBlock.Problem, CurrentBlock.Transactions);
-
-                    SafeConsole.WriteLine(ConsoleColor.DarkCyan, "{0:T}: Dev fee stopped", DateTime.Now);
-                }
-
-                cancellationToken.WaitHandle.WaitOne(TimeSpan.FromSeconds(miningTime - devFeeSeconds));
+            if (devFeeSeconds <= 0) {
+                return Task.CompletedTask;
             }
+
+            SafeConsole.WriteLine(ConsoleColor.DarkCyan, "{0:T}: Starting dev fee for {1} seconds", DateTime.Now, devFeeSeconds);
+        
+            if (cancellationToken.IsCancellationRequested) {
+                return Task.CompletedTask;
+            }
+
+            Wallet = devWallet;
+            CreateBlockAndAnnounceJob(CurrentBlock.Id, JobType.RESTART, CurrentBlock.Problem, CurrentBlock.Transactions);
+
+            cancellationToken.WaitHandle.WaitOne(TimeSpan.FromSeconds(devFeeSeconds));
+
+            Wallet = Configuration.GetValue<string>("user").Split(".").ElementAtOrDefault(0);
+            SafeConsole.WriteLine(ConsoleColor.DarkCyan, "{0:T}: Dev fee stopped", DateTime.Now);
+
+            if (cancellationToken.IsCancellationRequested) {
+                return Task.CompletedTask;
+            }
+
+            CreateBlockAndAnnounceJob(CurrentBlock.Id, JobType.RESTART, CurrentBlock.Problem, CurrentBlock.Transactions);
+
+            return Task.CompletedTask;
         }
 
         private async Task HandleConnection(CancellationToken cancellationToken)
@@ -217,6 +220,11 @@ namespace dcrpt_miner
                         continue;
                     }
 
+                    // https://github.com/bamboo-crypto/bamboo/blob/55645977b3c7d98ababa9d467304182ccd76cfd1/src/core/constants.hpp#L20
+                    const int maxTransactions = 25000;
+
+                    var txs = transactions.data.OrderByDescending(x => x.fee).Take(maxTransactions - 1).ToList();
+
                     Logger.LogDebug("{}: New Block = {}, Difficulty = {}, Transactions = {}, RetryCount = {}",
                         DateTime.Now,
                         newId,
@@ -226,7 +234,7 @@ namespace dcrpt_miner
 
                     retryCount = 0;
 
-                     CreateBlockAndAnnounceJob(newId + 1, JobType.NEW, problem.data, transactions.data);
+                     CreateBlockAndAnnounceJob(newId + 1, JobType.NEW, problem.data, txs);
 
                     currentId = newId;
                 }
@@ -284,6 +292,7 @@ namespace dcrpt_miner
                     };
 
                     Channels.Jobs.Writer.WriteAsync(new Job {
+                        Id = blockId.ToString(),
                         Type = jobType,
                         Name = JobName,
                         Nonce = CurrentBlock.Nonce,
@@ -337,6 +346,25 @@ namespace dcrpt_miner
 
         private void PrintRetryMessage(uint retryCount, uint retries) {
             SafeConsole.WriteLine(ConsoleColor.DarkRed, "{0:T}: Node connection interrupted, retrying ({1} / {2})...", DateTime.Now, retryCount, retries);
+        }
+
+        protected virtual void Dispose(bool disposing)
+        {
+            if (!disposedValue)
+            {
+                if (disposing)
+                {
+                    ThreadSource.Cancel();
+                }
+
+                disposedValue = true;
+            }
+        }
+
+        public void Dispose()
+        {
+            Dispose(disposing: true);
+            GC.SuppressFinalize(this);
         }
     }
 }

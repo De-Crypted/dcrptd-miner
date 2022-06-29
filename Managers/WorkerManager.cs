@@ -93,7 +93,7 @@ namespace dcrpt_miner
 
                 if (job.Type == JobType.NEW) {
                     Console.ForegroundColor = ConsoleColor.DarkYellow;
-                    Console.WriteLine("{0:T}: New {1} (diff {2})", DateTime.Now, job.Name, job.Difficulty);
+                    Console.WriteLine("{0:T}: New {1} {2} (diff {3})", DateTime.Now, job.Name, job.Id.ToLowerInvariant(), job.Difficulty);
                     Console.ResetColor();
                 }
 

@@ -17,7 +17,7 @@ namespace dcrpt_miner
 
         void setItems(List<Transaction> transactions)
         {
-            transactions.Sort((a, b) => a.CalculateHash().AsString().CompareTo(b.CalculateHash().AsString()));
+            transactions.Sort((a, b) => a.CalculateHash().AsString().CompareTo(b.CalculateHash().AsString()) * -1);
 
             var queue = new Queue<HashTree>();
 

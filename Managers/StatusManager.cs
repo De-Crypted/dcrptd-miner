@@ -65,7 +65,7 @@ namespace dcrpt_miner
             {
                 hashes = hashes,
                 uptime = Convert.ToInt64(Watch.Elapsed.TotalSeconds),
-                ver = "1.2.0", // TODO: Set Assembly version upon release
+                ver = "2.0.1", // TODO: Set Assembly version upon release
                 rejected = RejectedShares
             };
         }
@@ -168,7 +168,7 @@ namespace dcrpt_miner
         public static void PrintHelp()
         {
             var helpMsg = @"|---------------------------------------|
-| Hotkeys                     |
+| Hotkeys                               |
 |---------------------------------------|
 | H     Print this help                 |
 | P     Pause mining                    |                    

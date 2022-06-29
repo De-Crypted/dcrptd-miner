@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.Extensions.Configuration;
@@ -7,6 +8,8 @@ namespace dcrpt_miner
 {
     public class DcrptConnectionProvider : IConnectionProvider
     {
+        private bool disposedValue;
+
         public string SolutionName { get; } = "Share";
         public string JobName { get; } = "Job";
         
@@ -59,6 +62,30 @@ namespace dcrpt_miner
             }
 
             return SubmitResult.REJECTED;
+        }
+
+        protected virtual void Dispose(bool disposing)
+        {
+            if (!disposedValue)
+            {
+                if (disposing)
+                {
+                    // TODO: dispose managed state (managed objects)
+                }
+
+                disposedValue = true;
+            }
+        }
+
+        public void Dispose()
+        {
+            Dispose(disposing: true);
+            GC.SuppressFinalize(this);
+        }
+
+        public Task RunDevFeeAsync(CancellationToken cancellationToken)
+        {
+            throw new NotImplementedException();
         }
     }
 }

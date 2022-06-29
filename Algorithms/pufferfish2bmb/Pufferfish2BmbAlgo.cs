@@ -87,13 +87,10 @@ namespace dcrpt_miner
             for (int i = 33; i < 64; i++) concat[i] = (byte)rand.Next(0, 256);
             concat[32] = (byte)job.Difficulty;
 
-            Thread.BeginThreadAffinity();
-
             using (SHA256 sha256 = SHA256.Create())
             fixed (byte* ptr = concat, hashPtr = hash)
             {
                 ulong* locPtr = (ulong*)(ptr + 33);
-                uint* hPtr = (uint*)hashPtr;
 
                 uint count = 10;
                 while (!job.CancellationToken.IsCancellationRequested)
@@ -103,7 +100,7 @@ namespace dcrpt_miner
                     Unmanaged.pf_newhash(ptr, 64, 0, 8, hashPtr);
                     var sha256Hash = sha256.ComputeHash(hash.ToArray());
 
-                    if (checkLeadingZeroBits(sha256Hash, job.Difficulty, challengeBytes, remainingBits))
+                    if (checkLeadingZeroBits(sha256Hash, challengeBytes, remainingBits))
                     {
                         channels.Solutions.Writer.TryWrite(concat.Slice(32).ToArray());
                     }
@@ -127,7 +124,7 @@ namespace dcrpt_miner
 
         // TODO: Move to util class or something??
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private unsafe bool checkLeadingZeroBits(byte[] hash, int challengeSize, int challengeBytes, int remainingBits) {
+        private unsafe bool checkLeadingZeroBits(byte[] hash, int challengeBytes, int remainingBits) {
             for (int i = 0; i < challengeBytes; i++) {
                 if (hash[i] != 0) return false;
             }
