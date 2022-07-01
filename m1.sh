@@ -4,8 +4,7 @@ set -euo pipefail
 # brew install openssl3
 # brew install gcc
 
-pushd .
-cd Algorithms/pufferfish2bmb
+pushd Algorithms/pufferfish2bmb
 
 rm pufferfish2-apple-m1.o pufferfish2-apple-m1.so pufferfish2 || true
 
