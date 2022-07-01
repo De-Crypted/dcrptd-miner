@@ -11,6 +11,7 @@ using System.Net;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Http.Features;
 using System.Threading;
+using System.Reflection;
 
 namespace dcrpt_miner
 {
@@ -52,7 +53,10 @@ namespace dcrpt_miner
                     });
                 });
 
-            Console.Title = "dcrptd miner";
+            var version = Assembly.GetEntryAssembly().GetCustomAttribute<AssemblyInformationalVersionAttribute>().InformationalVersion;
+            Console.WriteLine("dcrptd miner v" + version.ToString());
+
+            Console.Title = "dcrptd miner " + version.ToString();
             await host.StartAsync();
 
             Console.TreatControlCAsInput = true;
