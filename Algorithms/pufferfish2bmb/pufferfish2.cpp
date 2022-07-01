@@ -25,20 +25,6 @@
 
 #include "pufferfish2.hpp"
 
-const static unsigned char itoa64[] =
-    "./ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-
-const static unsigned char idx64[0x80] = {
-    255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,
-    255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,
-    255,255,255,255,255,255,255,255,255,255,255,255,255,255,  0,  1,
-     54, 55, 56, 57, 58, 59, 60, 61, 62, 63,255,255,255,255,255,255,
-    255,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15, 16,
-     17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27,255,255,255,255,255,
-    255, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42,
-     43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53,255,255,255,255,255
-};
-
 size_t pf_encode(char *dst, void *src, size_t size)
 {
     uint8_t *dptr = (uint8_t *) dst;
@@ -121,6 +107,8 @@ size_t pf_decode(void *dst, char *src, size_t size)
 void pf_hashpass(const void *salt_r, const size_t salt_sz, const uint8_t cost_t, const uint8_t cost_m,
                  const void *key_r, const size_t key_sz, uint8_t *out)
 {
+    HMAC_CTX *ctx = HMAC_CTX_new();
+
     unsigned char key[PF_DIGEST_LENGTH]  = { 0 };
     unsigned char salt[PF_DIGEST_LENGTH] = { 0 };
 
@@ -139,8 +127,8 @@ void pf_hashpass(const void *salt_r, const size_t salt_sz, const uint8_t cost_t,
     log2_sbox_sz = cost_m + 5;
     sbox_sz = 1ULL << log2_sbox_sz;
 
-    PF_HMAC("", 0, salt_r, salt_sz, salt);
-    PF_HMAC(salt, PF_DIGEST_LENGTH, key_r, key_sz, key);
+    PF_HMAC(ctx, (unsigned char*)"", 0, (unsigned char*)salt_r, salt_sz, salt);
+    PF_HMAC(ctx, salt, PF_DIGEST_LENGTH, (unsigned char*)key_r, key_sz, key);
 
     for (i = 0; i < PF_SBOX_N; i++)
     {
@@ -148,14 +136,14 @@ void pf_hashpass(const void *salt_r, const size_t salt_sz, const uint8_t cost_t,
 
         for (j = 0; j < sbox_sz; j += (PF_DIGEST_LENGTH / sizeof(uint64_t)))
         {
-            PF_HMAC(key, PF_DIGEST_LENGTH, salt, PF_DIGEST_LENGTH, key);
+            PF_HMAC(ctx, key, PF_DIGEST_LENGTH, salt, PF_DIGEST_LENGTH, key);
 
             for (k = 0; k < (PF_DIGEST_LENGTH / sizeof(uint64_t)); k++)
                 S[i][j + k] = key_u64[k];
         }
     }
 
-    HASH_SBOX(key);
+    HASH_SBOX(ctx, key);
 
     P[ 0] = 0x243f6a8885a308d3ULL ^ key_u64[0];
     P[ 1] = 0x13198a2e03707344ULL ^ key_u64[1];
@@ -183,16 +171,18 @@ void pf_hashpass(const void *salt_r, const size_t salt_sz, const uint8_t cost_t,
     do
     {
         L = R = 0;
-        HASH_SBOX(key);
+        HASH_SBOX(ctx, key);
         REKEY(key);
     }
     while (--count);
 
-    HASH_SBOX(key);
+    HASH_SBOX(ctx, key);
     memcpy(out, key, PF_DIGEST_LENGTH);
 
     for (i = 0; i < PF_SBOX_N; i++)
         free(S[i]);
+
+    HMAC_CTX_free(ctx);
 }
 
 int pf_mksalt( const uint8_t cost_t, const uint8_t cost_m, char *salt)
@@ -220,16 +210,16 @@ int pf_crypt(const char *salt, const void *pass, const size_t pass_sz, char *has
     pf_salt settings;
     char *p;
 
-    p = (char*)strrchr(salt, '$');
-    if (p == NULL)
+    if (strncmp(salt, PF_ID, PF_ID_SZ))
+        return EINVAL;
+
+    if ((p = (char*)strrchr(salt, '$')) == NULL)
         return EINVAL;
 
     memset(hash, 0, PF_HASHSPACE);
     memmove(hash, salt, p - salt + 1);
 
-    bytes = pf_decode((void *)&settings, (char *)(salt + PF_ID_SZ), p - salt - PF_ID_SZ);
-
-    if (bytes != sizeof(pf_salt))
+    if ((bytes = pf_decode((void *)&settings, (char *)(salt + PF_ID_SZ), p - salt - PF_ID_SZ)) != sizeof(pf_salt))
         return EINVAL;
 
     pf_hashpass(settings.salt, PF_SALT_SZ, settings.cost_t, settings.cost_m, pass, pass_sz, buf);
@@ -243,19 +233,14 @@ int pf_newhash(const char *pass, const size_t pass_sz, const size_t cost_t, cons
     char salt[PF_SALTSPACE];
     int ret = 0;
 
-    if (cost_t > 63 || cost_m > 53) {
+    if (cost_t > 63 || cost_m > 53)
         return EOVERFLOW;
-    }
 
-    ret = pf_mksalt(cost_t, cost_m, salt);
-    if (ret != 0) {
+    if ((ret = pf_mksalt(cost_t, cost_m, salt)) != 0)
         return ret;
-    }
 
-    ret = pf_crypt(salt, pass, pass_sz, hash);
-    if (ret != 0) {
+    if ((ret = pf_crypt(salt, pass, pass_sz, hash)) != 0)
         return ret;
-    }
 
     return 0;
 }

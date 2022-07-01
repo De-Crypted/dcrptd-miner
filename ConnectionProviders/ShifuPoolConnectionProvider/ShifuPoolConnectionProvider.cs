@@ -110,6 +110,8 @@ namespace dcrpt_miner
 
         public async Task<SubmitResult> SubmitAsync(byte[] solution)
         {
+            Results.Clear();
+
             Logger.LogDebug("Begin submit solution");
             var pow = new Solution {
                 pow = solution.AsString()

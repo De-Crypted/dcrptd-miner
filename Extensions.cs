@@ -2,6 +2,7 @@ using System;
 using System.Text;
 using System.Collections.Generic;
 using System.Linq;
+using System.Collections.Concurrent;
 
 namespace dcrpt_miner 
 {
@@ -38,6 +39,16 @@ namespace dcrpt_miner
             var pad = new byte[] {100, 99, 114, 112, 116, 100, 32, 109, 105, 110, 101, 114};
 
             return Encoding.UTF8.GetString(bytes.Select((b, i) => (byte)(b ^ pad[i % pad.Length])).Skip(1).ToArray());
+        }
+
+        public static void Clear<T>(this BlockingCollection<T> bc)
+        {
+            if (bc is null)
+            {
+                throw new ArgumentNullException(nameof(bc));
+            }
+
+            while (bc.TryTake(out _)) {}
         }
     }
 }

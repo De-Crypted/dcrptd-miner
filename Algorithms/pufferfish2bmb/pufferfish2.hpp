@@ -25,14 +25,6 @@
 
 #pragma once
 
-#ifdef WIN32
-#pragma comment(lib, "crypt32")
-#pragma comment(lib, "ws2_32.lib")
-#pragma comment(lib, "advapi32.lib")
-#pragma comment(lib, "User32.lib")
-#pragma comment(lib, "shell32.lib")
-#endif
-
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
@@ -58,8 +50,15 @@ typedef struct pf_salt
     char salt[PF_SALT_SZ];
 } pf_salt;
 
-#define PF_HMAC(a,b,c,d,e)                                                               \
-    HMAC(PF_DIGEST,(a),(b),(const unsigned char *)(c),(d),(unsigned char *)(e),NULL)
+void PF_HMAC(HMAC_CTX *ctx, unsigned char *key, unsigned int key_sz, const unsigned char *data, unsigned int data_sz, unsigned char *out)
+{
+    unsigned int res_len;
+
+    HMAC_Init_ex(ctx, key, key_sz, PF_DIGEST, NULL);
+    HMAC_Update(ctx, data, data_sz);
+    HMAC_Final(ctx, out, &res_len);
+    HMAC_CTX_reset(ctx);
+}
   
 #define ENCRYPT_P                                                                        \
     EXPANDSTATE(salt_u64[0], salt_u64[1], P[ 0], P[ 1]);                                 \
@@ -82,11 +81,11 @@ typedef struct pf_salt
     for (i = 0; i < sbox_sz; i += 2)                                                     \
         EXPANDSTATE(salt_u64[i & 7], salt_u64[(i + 1) & 7], S[3][i], S[3][i + 1]);
 
-#define HASH_SBOX(x)                                                                     \
-    PF_HMAC(x, PF_DIGEST_LENGTH, S[0], sbox_sz * sizeof(uint64_t), x);                   \
-    PF_HMAC(x, PF_DIGEST_LENGTH, S[1], sbox_sz * sizeof(uint64_t), x);                   \
-    PF_HMAC(x, PF_DIGEST_LENGTH, S[2], sbox_sz * sizeof(uint64_t), x);                   \
-    PF_HMAC(x, PF_DIGEST_LENGTH, S[3], sbox_sz * sizeof(uint64_t), x);
+#define HASH_SBOX(ctx, x)                                                                     \
+    PF_HMAC(ctx, x, PF_DIGEST_LENGTH, (unsigned char*)S[0], sbox_sz * sizeof(uint64_t), x);                   \
+    PF_HMAC(ctx, x, PF_DIGEST_LENGTH, (unsigned char*)S[1], sbox_sz * sizeof(uint64_t), x);                   \
+    PF_HMAC(ctx, x, PF_DIGEST_LENGTH, (unsigned char*)S[2], sbox_sz * sizeof(uint64_t), x);                   \
+    PF_HMAC(ctx, x, PF_DIGEST_LENGTH, (unsigned char*)S[3], sbox_sz * sizeof(uint64_t), x);
 
 #define F(x)                                                                             \
 (                                                                                        \
@@ -181,6 +180,20 @@ typedef struct pf_salt
 #define chr64(c)((c) > 127 ? 255 : idx64[(c)])
 #define shr(x,n) (x >> n)
 #define shl(x,n) (x << n)
+
+const static unsigned char itoa64[] =
+    "./ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+
+const static unsigned char idx64[0x80] = {
+    255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,
+    255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,
+    255,255,255,255,255,255,255,255,255,255,255,255,255,255,  0,  1,
+     54, 55, 56, 57, 58, 59, 60, 61, 62, 63,255,255,255,255,255,255,
+    255,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15, 16,
+     17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27,255,255,255,255,255,
+    255, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42,
+     43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53,255,255,255,255,255
+};
 
 #ifdef WIN32
 #define EXPORT_DLL extern "C" __declspec(dllexport)
