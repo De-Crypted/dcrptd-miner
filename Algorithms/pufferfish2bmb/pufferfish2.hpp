@@ -31,7 +31,7 @@
 #include <errno.h>
 
 #include "openssl/sha.h"
-#include "openssl/hmac.h"
+#include "openssl/evp.h"
 
 #define PF_ID "$PF2$"
 #define PF_ID_SZ strlen(PF_ID)
@@ -50,14 +50,34 @@ typedef struct pf_salt
     char salt[PF_SALT_SZ];
 } pf_salt;
 
-void PF_HMAC(HMAC_CTX *ctx, unsigned char *key, unsigned int key_sz, const unsigned char *data, unsigned int data_sz, unsigned char *out)
-{
-    unsigned int res_len;
+#define I_PAD 0x36
+#define O_PAD 0x5C
+#define BLOCKSIZE 128
+#define MAX_BLOCK_SIZE 144
+#define DIGEST_SIZE 64
 
-    HMAC_Init_ex(ctx, key, key_sz, PF_DIGEST, NULL);
-    HMAC_Update(ctx, data, data_sz);
-    HMAC_Final(ctx, out, &res_len);
-    HMAC_CTX_reset(ctx);
+void PF_HMAC(EVP_MD_CTX *mdctx, unsigned char *key, unsigned int key_sz, const unsigned char *data, unsigned int data_sz, unsigned char *out)
+{
+    const EVP_MD *md = EVP_sha512();
+
+    unsigned int len;
+
+    unsigned char kx[BLOCKSIZE];
+    for (size_t i = 0; i < key_sz; i++) kx[i] = I_PAD ^ key[i];
+    for (size_t i = key_sz; i < BLOCKSIZE; i++) kx[i] = I_PAD ^ 0;
+
+    EVP_DigestInit_ex(mdctx, md, NULL);
+    EVP_DigestUpdate(mdctx, kx, BLOCKSIZE);
+    EVP_DigestUpdate(mdctx, data, data_sz);
+
+    for (size_t i = 0; i < key_sz; i++) kx[i] = O_PAD ^ key[i];
+    for (size_t i = key_sz; i < BLOCKSIZE; i++) kx[i] = O_PAD ^ 0;
+
+    EVP_DigestFinal_ex(mdctx, out, &len);
+    EVP_DigestInit_ex(mdctx, md, NULL);
+    EVP_DigestUpdate(mdctx, kx, BLOCKSIZE);
+    EVP_DigestUpdate(mdctx, out, len);
+    EVP_DigestFinal_ex(mdctx, out, &len);
 }
   
 #define ENCRYPT_P                                                                        \

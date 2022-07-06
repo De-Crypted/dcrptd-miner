@@ -107,10 +107,11 @@ size_t pf_decode(void *dst, char *src, size_t size)
 void pf_hashpass(const void *salt_r, const size_t salt_sz, const uint8_t cost_t, const uint8_t cost_m,
                  const void *key_r, const size_t key_sz, uint8_t *out)
 {
-    HMAC_CTX *ctx = HMAC_CTX_new();
+    EVP_MD_CTX *ctx(EVP_MD_CTX_create());
 
     unsigned char key[PF_DIGEST_LENGTH]  = { 0 };
-    unsigned char salt[PF_DIGEST_LENGTH] = { 0 };
+    // static salt used
+    unsigned char salt[PF_DIGEST_LENGTH] = { 101, 232, 121, 212, 125, 241, 222, 240, 175, 55, 141, 50, 233, 244, 254, 58, 130, 79, 181, 30, 33, 67, 192, 51, 34, 222, 242, 41, 54, 26, 243, 177, 122, 114, 74, 61, 101, 61, 5, 203, 159, 65, 244, 185, 13, 9, 232, 226, 136, 106, 120, 218, 72, 83, 125, 28, 250, 98, 151, 122, 130, 231, 55, 78 };
 
     uint64_t *salt_u64, *key_u64;
     uint64_t *S[PF_SBOX_N], P[18];
@@ -127,7 +128,6 @@ void pf_hashpass(const void *salt_r, const size_t salt_sz, const uint8_t cost_t,
     log2_sbox_sz = cost_m + 5;
     sbox_sz = 1ULL << log2_sbox_sz;
 
-    PF_HMAC(ctx, (unsigned char*)"", 0, (unsigned char*)salt_r, salt_sz, salt);
     PF_HMAC(ctx, salt, PF_DIGEST_LENGTH, (unsigned char*)key_r, key_sz, key);
 
     for (i = 0; i < PF_SBOX_N; i++)
@@ -182,7 +182,7 @@ void pf_hashpass(const void *salt_r, const size_t salt_sz, const uint8_t cost_t,
     for (i = 0; i < PF_SBOX_N; i++)
         free(S[i]);
 
-    HMAC_CTX_free(ctx);
+    EVP_MD_CTX_free(ctx);
 }
 
 int pf_mksalt( const uint8_t cost_t, const uint8_t cost_m, char *salt)
