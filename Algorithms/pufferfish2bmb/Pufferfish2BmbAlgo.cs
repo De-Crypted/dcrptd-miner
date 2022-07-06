@@ -241,7 +241,7 @@ namespace dcrpt_miner
                         //Thread.BeginThreadAffinity();
                         /*IntPtr osThread = Native32.GetCurrentThread();
 
-                        var bits = ulong.MaxValue;
+                        var bits = 0UL;
                         
                         if (tid == 0) {
                             bits = 1UL << 0;
@@ -291,11 +291,11 @@ namespace dcrpt_miner
                 StatusManager.CalculateUnit(hashes, out var hashrate, out var unit);
                 StatusManager.CalculateUnit(hashes / (i + 1), out var thashrate, out var tunit);
 
-                var avgPowerUsage = powerUsage.Average();
+                var avgPowerUsage = powerUsage.Count > 0 ? powerUsage.Average() : 0;
                 Console.WriteLine("\t\t{0:N2} {1}\t{2:N2} {3}\t{4:N2} h/w\t{5:N2}w\t\t{6:N2}w", 
                     hashrate, unit, 
                     thashrate, tunit,
-                    hashes / avgPowerUsage,
+                    avgPowerUsage > 0 ? hashes / avgPowerUsage : 0,
                     avgPowerUsage, 
                     avgPowerUsage / (i + 1));
             }
