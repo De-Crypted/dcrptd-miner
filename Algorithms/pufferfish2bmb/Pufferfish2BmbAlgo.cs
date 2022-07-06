@@ -212,6 +212,10 @@ namespace dcrpt_miner
             {
                 foreach (ISensor sensor in hardware.Sensors)
                 {
+                    if (sensor.SensorType == SensorType.Power) {
+                        Console.WriteLine("Found power sensor {0}", sensor.Name);
+                    }
+
                     if (sensor.SensorType == SensorType.Power && sensor.Name == "Package") {
                         powerSensor = sensor;
                     }
