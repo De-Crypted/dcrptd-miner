@@ -24,6 +24,28 @@ namespace dcrpt_miner
                 .AddJsonFile($"config.json", optional: true, reloadOnChange: true)
                 .Build();
 
+            var benchmark = configuration.GetValue<string>("benchmark");
+
+            if (!string.IsNullOrEmpty(benchmark)) {
+                Type tAlgo;
+
+                switch (benchmark) {
+                    case "sha256bmb":
+                        tAlgo = typeof(SHA256BmbAlgo);
+                    break;
+                    case "pufferfish2bmb":
+                        tAlgo = typeof(Pufferfish2BmbAlgo);
+                    break;
+                    default:
+                        // print possible algorithms
+                    return;
+                }
+
+                var algo = (IAlgorithm)Activator.CreateInstance(tAlgo);
+                algo.RunBenchmark();
+                return;
+            }
+
             var apiEnabled = configuration.GetValue<bool>("api:enabled");
 
             var host = Host.CreateDefaultBuilder(args)

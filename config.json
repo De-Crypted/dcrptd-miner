@@ -10,10 +10,10 @@
     "_action_after_retries_done": "Set action on what to do after all urls have been retried. Possible values: RETRY (= start again from first url), EXIT (= exits the miner)",
     "action_after_retries_done": "RETRY",
     "periodic_report": {
-        "_initial_delay": "Delay in secodns to wait before first Periodic Report",
+        "_initial_delay": "Delay in seconds to wait before first Periodic Report",
         "initial_delay": 30,
         "_report_interval": "Delay in seconds between Periodic Reports",
-        "report_interval": 180
+        "report_interval": 300
     },
     "api": {
         "_enabled": "Enable or disable api endpoint",

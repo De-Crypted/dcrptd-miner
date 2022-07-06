@@ -69,7 +69,7 @@ namespace dcrpt_miner
                         }
                     }).UnsafeStart();
 
-                    Workers.Add(queue); 
+                    Workers.Add(queue);
                 }
             }
 
@@ -498,6 +498,11 @@ namespace dcrpt_miner
             // Do not change this code. Put cleanup code in 'Dispose(bool disposing)' method
             Dispose(disposing: true);
             GC.SuppressFinalize(this);
+        }
+
+        public void RunBenchmark()
+        {
+            throw new NotImplementedException();
         }
     }
 

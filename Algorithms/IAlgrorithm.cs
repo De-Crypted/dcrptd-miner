@@ -16,5 +16,6 @@ namespace dcrpt_miner
 
         void Initialize(ILogger logger, Channels channels, ManualResetEvent PauseEvent);
         void ExecuteJob(Job job);
+        void RunBenchmark();
     }
 }

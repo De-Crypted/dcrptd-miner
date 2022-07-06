@@ -1,16 +1,35 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
+using LibreHardwareMonitor.Hardware;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using static dcrpt_miner.StatusManager;
 
 namespace dcrpt_miner 
 {
+    /*static class Native32
+    {
+        [DllImport("kernel32.dll")]
+        public static extern IntPtr GetCurrentThread();
+
+		[DllImport("kernel32")]
+		public static extern int GetCurrentThreadId();
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+        public static extern int GetCurrentProcessorNumber();
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+        public static extern UIntPtr SetThreadAffinityMask(IntPtr handle, UIntPtr mask);
+    }*/
+
     public class Pufferfish2BmbAlgo : IAlgorithm
     {
         public static bool GPU => false;
@@ -52,6 +71,7 @@ namespace dcrpt_miner
                 var tid = i;
                 logger.LogDebug("Starting CpuWorker[{}] thread", tid);
                 new Thread(() => {
+                    Thread.BeginThreadAffinity();
                     var token = ThreadSource.Token;
                     while (!token.IsCancellationRequested) {
                         var job = queue.Take(token);
@@ -168,6 +188,158 @@ namespace dcrpt_miner
             // Do not change this code. Put cleanup code in 'Dispose(bool disposing)' method
             Dispose(disposing: true);
             GC.SuppressFinalize(this);
+        }
+
+        public void RunBenchmark()
+        {
+            Computer computer = new Computer
+            {
+                IsCpuEnabled = true,
+                IsGpuEnabled = false,
+                IsMemoryEnabled = false,
+                IsMotherboardEnabled = false,
+                IsControllerEnabled = false,
+                IsNetworkEnabled = false,
+                IsStorageEnabled = false
+            };
+
+            computer.Open();
+            computer.Accept(new UpdateVisitor());
+
+            ISensor powerSensor = null;
+
+            foreach (IHardware hardware in computer.Hardware)
+            {
+                foreach (ISensor sensor in hardware.Sensors)
+                {
+                    if (sensor.SensorType == SensorType.Power && sensor.Name == "Package") {
+                        powerSensor = sensor;
+                    }
+                }
+            }
+
+            var threads = Environment.ProcessorCount;
+
+            Console.ForegroundColor = ConsoleColor.DarkYellow;
+            Console.WriteLine("Running Benchmark");
+            Console.WriteLine("If power usage is not recorded, run as administrator!");
+            Console.WriteLine("Threads\t\tHashrate\tper thread\tper watt\tPower Usage\tper thread");
+
+            var tsw = new Stopwatch();
+            tsw.Start();
+
+            for (int i = 0; i < threads; i++) {
+                Console.Write("{0}", i + 1);
+                var sw = new Stopwatch();
+                sw.Start();
+
+                var threadList = new List<Thread>();
+
+                for (int x = 0; x <= i; x++) {
+                    var tid = x;
+                    var thread = new Thread(() => {
+                        //Thread.BeginThreadAffinity();
+                        /*IntPtr osThread = Native32.GetCurrentThread();
+
+                        var bits = ulong.MaxValue;
+                        
+                        if (tid == 0) {
+                            bits = 1UL << 0;
+                        }
+
+                        if (tid == 1) {
+                            bits = 1UL << 1;
+                        }
+
+                        if (tid == 0) {
+                            bits = 1UL << 2;
+                        }
+
+                        if (tid == 0) {
+                            bits = 1UL << 3;
+                        }
+
+                        UIntPtr mask = new UIntPtr(bits);
+
+                        UIntPtr lastaffinity = Native32.SetThreadAffinityMask(osThread, mask);*/
+                        Thread.BeginThreadAffinity();
+                        RunBenchmarkThread();
+                    });
+
+                    threadList.Add(thread);
+
+                    thread.Start();
+                }
+
+                var powerUsage = new List<float>();
+                foreach (var thread in threadList) {
+                    while (thread.ThreadState == System.Threading.ThreadState.Running) {
+                        if (thread.IsAlive && powerSensor != null) {
+                            powerSensor.Hardware.Accept(new UpdateVisitor());
+                            if (powerSensor.Value.HasValue) {
+                                powerUsage.Add(powerSensor.Value.Value);
+                            }
+                        }
+
+                        Thread.Sleep(200);
+                    }
+                }
+
+                sw.Stop();
+
+                var hashes = (i + 1) * 1000 / sw.Elapsed.TotalSeconds;
+                StatusManager.CalculateUnit(hashes, out var hashrate, out var unit);
+                StatusManager.CalculateUnit(hashes / (i + 1), out var thashrate, out var tunit);
+
+                var avgPowerUsage = powerUsage.Average();
+                Console.WriteLine("\t\t{0:N2} {1}\t{2:N2} {3}\t{4:N2} h/w\t{5:N2}w\t\t{6:N2}w", 
+                    hashrate, unit, 
+                    thashrate, tunit,
+                    hashes / avgPowerUsage,
+                    avgPowerUsage, 
+                    avgPowerUsage / (i + 1));
+            }
+
+            computer.Close();
+            tsw.Stop();
+            Console.WriteLine("Benchmark completed in {0} seconds", tsw.Elapsed.TotalSeconds);
+            Console.ForegroundColor = ConsoleColor.White;
+        }
+
+        public unsafe void RunBenchmarkThread()
+        {
+            byte[] buffer = new byte[4];
+            _global.GetBytes(buffer);
+            var rand = new Random(BitConverter.ToInt32(buffer, 0));
+
+            Span<byte> concat = new byte[64];
+            Span<byte> hash = new byte[119]; // TODO: verify this matches PF_HASHSPACE in all cases
+            Span<byte> solution = new byte[32];
+
+            int challengeBytes = 15 / 8;
+            int remainingBits = 15 - (8 * challengeBytes);
+
+            for (int i = 0; i < 64; i++) concat[i] = (byte)rand.Next(0, 256);
+
+            using (SHA256 sha256 = SHA256.Create())
+            fixed (byte* ptr = concat, hashPtr = hash)
+            {
+                ulong* locPtr = (ulong*)(ptr + 33);
+
+                for (int i = 0; i < 1000; i++)
+                {
+                    ++*locPtr;
+
+                    Unmanaged.pf_newhash(ptr, 64, 0, 8, hashPtr);
+                    var sha256Hash = sha256.ComputeHash(hash.ToArray());
+
+                    if (checkLeadingZeroBits(sha256Hash, challengeBytes, remainingBits))
+                    {
+                        // dummy work
+                        ++*locPtr;
+                    }
+                }
+            }
         }
     }
 }

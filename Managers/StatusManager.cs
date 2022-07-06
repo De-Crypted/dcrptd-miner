@@ -7,6 +7,7 @@ using System.Collections.Generic;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using System.Text;
+using LibreHardwareMonitor.Hardware;
 
 namespace dcrpt_miner
 {
@@ -65,7 +66,7 @@ namespace dcrpt_miner
             {
                 hashes = hashes,
                 uptime = Convert.ToInt64(Watch.Elapsed.TotalSeconds),
-                ver = "2.0.1", // TODO: Set Assembly version upon release
+                ver = "2.1.0", // TODO: Set Assembly version upon release
                 rejected = RejectedShares
             };
         }
@@ -122,44 +123,118 @@ namespace dcrpt_miner
         {
             CollectHashrateSnapshot();
 
+            Computer computer = new Computer
+            {
+                IsCpuEnabled = true,
+                IsGpuEnabled = false,
+                IsMemoryEnabled = false,
+                IsMotherboardEnabled = true,
+                IsControllerEnabled = false,
+                IsNetworkEnabled = false,
+                IsStorageEnabled = false
+            };
+
+            computer.Open();
+            computer.Accept(new UpdateVisitor());
+
+
+            // CPU
+            // "CCDs Average (Tdie)"
+
+            foreach (IHardware hardware in computer.Hardware)
+            {
+                Console.WriteLine("Hardware: {0}", hardware.Name);
+                
+                foreach (IHardware subhardware in hardware.SubHardware)
+                {
+                    Console.WriteLine("\tSubhardware: {0}", subhardware.Name);
+                    
+                    foreach (ISensor sensor in subhardware.Sensors)
+                    {
+                        Console.WriteLine("\t\tSensor: {0}, value: {1}", sensor.Name, sensor.Value);
+                    }
+                }
+
+                foreach (ISensor sensor in hardware.Sensors)
+                {
+                    Console.WriteLine("\tSensor: {0} - {2}, value: {1}", sensor.Name, sensor.Value, sensor.SensorType);
+                }
+            }
+            
+            computer.Close();
+
+            var accepted = Interlocked.Read(ref AcceptedShares);
+            var dropped = Interlocked.Read(ref DroppedShares);
+            var rejected = Interlocked.Read(ref RejectedShares);
+            var total = (double)(accepted + dropped + rejected);
+
             var sb = new StringBuilder();
-            sb.AppendLine("|---------------------------------------|");
+            sb.AppendLine("|---------------------------------------------------------------|");
             // FIXME: hack to get alignment correct
-            sb.AppendFormat("| Periodic Report - {0}{1}|{2}", AlgoName, AlgoName == "n/a" ? "\t\t\t" : AlgoName == "sha256bmb" ? "\t\t" : "\t", Environment.NewLine);
-            sb.AppendLine("|---------------------------------------|");
-            sb.AppendFormat("| Accepted \t\t{0}\t\t|{1}", Interlocked.Read(ref AcceptedShares), Environment.NewLine);
-            sb.AppendFormat("| Dropped \t\t{0}\t\t|{1}", Interlocked.Read(ref DroppedShares), Environment.NewLine);
-            sb.AppendFormat("| Rejected \t\t{0}\t\t|{1}", Interlocked.Read(ref RejectedShares), Environment.NewLine);
+            //sb.AppendFormat("| Periodic Report - {0}{1}|{2}", AlgoName, AlgoName == "n/a" ? "\t\t\t" : AlgoName == "sha256bmb" ? "\t\t\t\t\t\t" : "\t\t\t\t\t", Environment.NewLine);
+            sb.AppendLine("| Periodic Report \t\t\t\t\t\t|");
+            sb.AppendLine("|---------------------------------------------------------------|");
+            sb.AppendLine("| Algorithm\tpufferfish2bmb\t\t\t\t\t|");
+            sb.AppendLine("| Server \t185.215.180.7:5555 \t\t\t\t\t|");
+            sb.AppendLine("| Protocol \tshifu+tcp\t\t\t\t\t\t|");
+            sb.AppendLine("| Latency \t48ms\t\t\t\t\t\t|");
+            sb.AppendLine("|---------------------------------------------------------------|");
+            sb.AppendFormat("| Accepted \t{0}\t\t{1:N0}%\t\t{2:N1} / min\t\t|{3}", 
+                accepted,
+                total > 0 ? accepted / total * 100 : 0,
+                Watch.Elapsed.TotalMinutes > 0 ? accepted / Watch.Elapsed.TotalMinutes : accepted, 
+                Environment.NewLine);
+            sb.AppendFormat("| Dropped \t{0}\t\t{1:N0}%\t\t\t\t\t|{2}", 
+                dropped,
+                total > 0 ? dropped / total * 100 : 0,
+                // Watch.Elapsed.TotalMinutes > 0 ? dropped / Watch.Elapsed.TotalMinutes : dropped, 
+                Environment.NewLine);
+            sb.AppendFormat("| Rejected \t{0}\t\t{1:N0}%\t\t\t\t\t|{2}", 
+                rejected,
+                total > 0 ? rejected / total * 100 : 0,
+                // Watch.Elapsed.TotalMinutes > 0 ? rejected / Watch.Elapsed.TotalMinutes : rejected, 
+                Environment.NewLine);
+            sb.AppendLine("|---------------------------------------------------------------|");
+            sb.AppendLine("| Hashrates\t1min\t5min\t\t30min\t\t\t|");
 
             ulong totalHashes = 0;
             
             if (CpuHashCount.Length > 0) {
-                var cpuHashes = GetHashrate("CPU", 0, TimeSpan.FromMinutes(1));
-                CalculateUnit(cpuHashes, out double cpu_hashrate, out string cpu_unit);
-                sb.AppendFormat("| Hashrate (CPU) \t{0:N2} {1}\t|{2}", cpu_hashrate, cpu_unit, Environment.NewLine);
-                totalHashes += cpuHashes;
+                var hashes = GetHashrate("CPU", 0, TimeSpan.FromMinutes(1));
+                CalculateUnit(hashes, out double cpu_1m_hashrate, out string cpu_1m_unit);
+                CalculateUnit(GetHashrate("CPU", 0, TimeSpan.FromMinutes(5)), out double cpu_5m_hashrate, out string cpu_5m_unit);
+                CalculateUnit(GetHashrate("CPU", 0, TimeSpan.FromMinutes(30)), out double cpu_30m_hashrate, out string cpu_30m_unit);
+                sb.AppendFormat("| CPU \t\t{0:N2} {1}\t{2:N2} {3}\t{4:N2} {5}\t\t|{6}", 
+                    cpu_1m_hashrate, cpu_1m_unit,
+                    cpu_5m_hashrate, cpu_5m_unit,
+                    cpu_30m_hashrate, cpu_30m_unit,
+                    Environment.NewLine);
+                totalHashes += hashes;
             }
 
             if (GpuHashCount.Length > 0) {
                 for (int i = 0; i < GpuHashCount.Length; i++) {
-                    var gpuHashes = GetHashrate("GPU", i, TimeSpan.FromMinutes(1));
-                    CalculateUnit(gpuHashes, out double gpu_hashrate, out string gpu_unit);
-                    sb.AppendFormat("| Hashrate (GPU #{0}) \t{1:N2} {2}\t|{3}",
+                var hashes = GetHashrate("GPU", i, TimeSpan.FromMinutes(1));
+                CalculateUnit(hashes, out double gpu_1m_hashrate, out string gpu_1m_unit);
+                CalculateUnit(GetHashrate("GPU", i, TimeSpan.FromMinutes(5)), out double gpu_5m_hashrate, out string gpu_5m_unit);
+                CalculateUnit(GetHashrate("GPU", i, TimeSpan.FromMinutes(30)), out double gpu_30m_hashrate, out string gpu_30m_unit);
+                    sb.AppendFormat("| Hashrate (GPU #{0}) \t{1:N2} {2}\t{3:N2} {4}\t{5:N2} {6}\t\t|{7}",
                         i,
-                        gpu_hashrate, 
-                        gpu_unit, 
+                        gpu_1m_hashrate, gpu_1m_unit,
+                        gpu_5m_hashrate, gpu_5m_unit,
+                        gpu_30m_hashrate, gpu_30m_unit,
                         Environment.NewLine);
 
-                    totalHashes += gpuHashes;
+                    totalHashes += hashes;
                 }
             }
 
-            if ((CpuHashCount.Length + GpuHashCount.Length) > 1) {
+            if (CpuHashCount.Length > 0 && GpuHashCount.Length > 0) {
                 CalculateUnit(totalHashes, out double hashrate, out string unit);
                 sb.AppendFormat("| Hashrate (Total) \t{0:N2} {1}\t|{2}", hashrate, unit, Environment.NewLine);
             }
 
-            sb.AppendLine("|---------------------------------------|");
+            sb.AppendLine("|---------------------------------------------------------------|");
             sb.AppendFormat("Uptime {0} days, {1} hours, {2} minutes", Watch.Elapsed.Days, Watch.Elapsed.Hours, Watch.Elapsed.Minutes);
             
             SafeConsole.WriteLine(ConsoleColor.White, sb.ToString());
@@ -191,8 +266,8 @@ namespace dcrpt_miner
                 SpinLock.Enter(ref lockTaken);
                 ulong hashes = 0;
 
-                // keep only snapshots from past 10 minutes
-                var expiredAt = DateTime.Now.AddMinutes(-10);
+                // keep only snapshots from past 30 minutes
+                var expiredAt = DateTime.Now.AddMinutes(-30);
                 HashrateSnapshots.RemoveAll(p => p.timestamp <= expiredAt);
 
                 if (CpuHashCount.Length > 0) {
@@ -261,7 +336,7 @@ namespace dcrpt_miner
             }
         }
 
-        private static void CalculateUnit(double hashrate, out double adjusted_hashrate, out string unit) {
+        public static void CalculateUnit(double hashrate, out double adjusted_hashrate, out string unit) {
             if (hashrate > 1000000000000) {
                 adjusted_hashrate = hashrate / 1000000000000;
                 unit = "TH/s";
@@ -295,6 +370,21 @@ namespace dcrpt_miner
             public String type { get; set; }
             public int id { get; set; }
             public ulong hashrate { get; set; }
+        }
+
+        public class UpdateVisitor : IVisitor
+        {
+            public void VisitComputer(IComputer computer)
+            {
+                computer.Traverse(this);
+            }
+            public void VisitHardware(IHardware hardware)
+            {
+                hardware.Update();
+                foreach (IHardware subHardware in hardware.SubHardware) subHardware.Accept(this);
+            }
+            public void VisitSensor(ISensor sensor) { }
+            public void VisitParameter(IParameter parameter) { }
         }
     }
 }
