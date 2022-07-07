@@ -20,6 +20,7 @@ namespace dcrpt_miner
         public static ulong[] CpuHashCount = new ulong[0];
         public static ulong[] GpuHashCount = new ulong[0];
         public static string AlgoName = "n/a";
+        public static IConnectionProvider ConnectionProvider;
 
         private static Stopwatch Watch { get; set; }
         private static SpinLock SpinLock = new SpinLock();
@@ -123,79 +124,40 @@ namespace dcrpt_miner
         {
             CollectHashrateSnapshot();
 
-            /*Computer computer = new Computer
-            {
-                IsCpuEnabled = true,
-                IsGpuEnabled = false,
-                IsMemoryEnabled = false,
-                IsMotherboardEnabled = true,
-                IsControllerEnabled = false,
-                IsNetworkEnabled = false,
-                IsStorageEnabled = false
-            };
-
-            computer.Open();
-            computer.Accept(new UpdateVisitor());
-
-
-            // CPU
-            // "CCDs Average (Tdie)"
-
-            foreach (IHardware hardware in computer.Hardware)
-            {
-                Console.WriteLine("Hardware: {0}", hardware.Name);
-                
-                foreach (IHardware subhardware in hardware.SubHardware)
-                {
-                    Console.WriteLine("\tSubhardware: {0}", subhardware.Name);
-                    
-                    foreach (ISensor sensor in subhardware.Sensors)
-                    {
-                        Console.WriteLine("\t\tSensor: {0}, value: {1}", sensor.Name, sensor.Value);
-                    }
-                }
-
-                foreach (ISensor sensor in hardware.Sensors)
-                {
-                    Console.WriteLine("\tSensor: {0} - {2}, value: {1}", sensor.Name, sensor.Value, sensor.SensorType);
-                }
-            }
-            
-            computer.Close();*/
-
             var accepted = Interlocked.Read(ref AcceptedShares);
             var dropped = Interlocked.Read(ref DroppedShares);
             var rejected = Interlocked.Read(ref RejectedShares);
             var total = (double)(accepted + dropped + rejected);
 
             var sb = new StringBuilder();
-            sb.AppendLine("|---------------------------------------------------------------|");
+            //sb.AppendLine("|---------------------------------------------------------------|");
             // FIXME: hack to get alignment correct
             //sb.AppendFormat("| Periodic Report - {0}{1}|{2}", AlgoName, AlgoName == "n/a" ? "\t\t\t" : AlgoName == "sha256bmb" ? "\t\t\t\t\t\t" : "\t\t\t\t\t", Environment.NewLine);
-            sb.AppendLine("| Periodic Report \t\t\t\t\t\t|");
-            sb.AppendLine("|---------------------------------------------------------------|");
-            sb.AppendLine("| Algorithm\tpufferfish2bmb\t\t\t\t\t|");
-            sb.AppendLine("| Server \t185.215.180.7:5555 \t\t\t\t\t|");
-            sb.AppendLine("| Protocol \tshifu+tcp\t\t\t\t\t\t|");
-            sb.AppendLine("| Latency \t48ms\t\t\t\t\t\t|");
-            sb.AppendLine("|---------------------------------------------------------------|");
-            sb.AppendFormat("| Accepted \t{0}\t\t{1:N0}%\t\t{2:N1} / min\t\t|{3}", 
+            sb.AppendLine();
+            sb.AppendLine("| Periodic Report \t\t\t\t\t\t");
+            sb.AppendLine("|--------------------------------------------------------------");
+            sb.AppendFormat("| Algorithm\t{0}{1}", AlgoName, Environment.NewLine);
+            sb.AppendFormat("| Server\t{0}{1}", ConnectionProvider != null ? ConnectionProvider.Server : "n/a", Environment.NewLine);
+            sb.AppendFormat("| Protocol\t{0}{1}", ConnectionProvider != null ? ConnectionProvider.Protocol : "n/a", Environment.NewLine);
+            sb.AppendFormat("| Latency\t{0} ms{1}", ConnectionProvider != null ? ConnectionProvider.Ping() : "n/a", Environment.NewLine);
+            sb.AppendLine("|--------------------------------------------------------------");
+            sb.AppendFormat("| Accepted \t{0}\t\t{1:N0}%\t\t{2:N1} / min{3}", 
                 accepted,
                 total > 0 ? accepted / total * 100 : 0,
                 Watch.Elapsed.TotalMinutes > 0 ? accepted / Watch.Elapsed.TotalMinutes : accepted, 
                 Environment.NewLine);
-            sb.AppendFormat("| Dropped \t{0}\t\t{1:N0}%\t\t\t\t\t|{2}", 
+            sb.AppendFormat("| Dropped \t{0}\t\t{1:N0}%{2}", 
                 dropped,
                 total > 0 ? dropped / total * 100 : 0,
                 // Watch.Elapsed.TotalMinutes > 0 ? dropped / Watch.Elapsed.TotalMinutes : dropped, 
                 Environment.NewLine);
-            sb.AppendFormat("| Rejected \t{0}\t\t{1:N0}%\t\t\t\t\t|{2}", 
+            sb.AppendFormat("| Rejected \t{0}\t\t{1:N0}%{2}", 
                 rejected,
                 total > 0 ? rejected / total * 100 : 0,
                 // Watch.Elapsed.TotalMinutes > 0 ? rejected / Watch.Elapsed.TotalMinutes : rejected, 
                 Environment.NewLine);
-            sb.AppendLine("|---------------------------------------------------------------|");
-            sb.AppendLine("| Hashrates\t1min\t5min\t\t30min\t\t\t|");
+            sb.AppendLine("|--------------------------------------------------------------");
+            sb.AppendLine("| Hashrates\t1min    \t5min\t\t30min");
 
             ulong totalHashes = 0;
             
@@ -204,7 +166,7 @@ namespace dcrpt_miner
                 CalculateUnit(hashes, out double cpu_1m_hashrate, out string cpu_1m_unit);
                 CalculateUnit(GetHashrate("CPU", 0, TimeSpan.FromMinutes(5)), out double cpu_5m_hashrate, out string cpu_5m_unit);
                 CalculateUnit(GetHashrate("CPU", 0, TimeSpan.FromMinutes(30)), out double cpu_30m_hashrate, out string cpu_30m_unit);
-                sb.AppendFormat("| CPU \t\t{0:N2} {1}\t{2:N2} {3}\t{4:N2} {5}\t\t|{6}", 
+                sb.AppendFormat("| CPU \t\t{0:N2} {1}\t{2:N2} {3}\t{4:N2} {5}{6}", 
                     cpu_1m_hashrate, cpu_1m_unit,
                     cpu_5m_hashrate, cpu_5m_unit,
                     cpu_30m_hashrate, cpu_30m_unit,
@@ -218,7 +180,7 @@ namespace dcrpt_miner
                 CalculateUnit(hashes, out double gpu_1m_hashrate, out string gpu_1m_unit);
                 CalculateUnit(GetHashrate("GPU", i, TimeSpan.FromMinutes(5)), out double gpu_5m_hashrate, out string gpu_5m_unit);
                 CalculateUnit(GetHashrate("GPU", i, TimeSpan.FromMinutes(30)), out double gpu_30m_hashrate, out string gpu_30m_unit);
-                    sb.AppendFormat("| Hashrate (GPU #{0}) \t{1:N2} {2}\t{3:N2} {4}\t{5:N2} {6}\t\t|{7}",
+                    sb.AppendFormat("| Hashrate (GPU #{0}) \t{1:N2} {2}\t{3:N2} {4}\t{5:N2} {6}{7}",
                         i,
                         gpu_1m_hashrate, gpu_1m_unit,
                         gpu_5m_hashrate, gpu_5m_unit,
@@ -231,11 +193,12 @@ namespace dcrpt_miner
 
             if (CpuHashCount.Length > 0 && GpuHashCount.Length > 0) {
                 CalculateUnit(totalHashes, out double hashrate, out string unit);
-                sb.AppendFormat("| Hashrate (Total) \t{0:N2} {1}\t|{2}", hashrate, unit, Environment.NewLine);
+                sb.AppendFormat("| Hashrate (Total) \t{0:N2} {1}{2}", hashrate, unit, Environment.NewLine);
             }
 
-            sb.AppendLine("|---------------------------------------------------------------|");
-            sb.AppendFormat("Uptime {0} days, {1} hours, {2} minutes", Watch.Elapsed.Days, Watch.Elapsed.Hours, Watch.Elapsed.Minutes);
+            sb.AppendLine("|--------------------------------------------------------------");
+            sb.AppendFormat("| Uptime {0} days, {1} hours, {2} minutes", Watch.Elapsed.Days, Watch.Elapsed.Hours, Watch.Elapsed.Minutes);
+            sb.AppendLine();
             
             SafeConsole.WriteLine(ConsoleColor.White, sb.ToString());
         }
@@ -257,6 +220,11 @@ namespace dcrpt_miner
         {
             AlgoName = algo.Name;
             HashrateSnapshots.Clear();
+        }
+
+        public static void RegisterConnectionProvider(IConnectionProvider connectionProvider)
+        {
+            ConnectionProvider = connectionProvider;
         }
 
         private static void CollectHashrateSnapshot()

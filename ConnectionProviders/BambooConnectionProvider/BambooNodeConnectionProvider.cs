@@ -10,6 +10,8 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using System.Linq;
 using System.Reflection;
+using System.Net.NetworkInformation;
+using System.Net;
 
 namespace dcrpt_miner 
 {
@@ -32,6 +34,9 @@ namespace dcrpt_miner
         private string Url { get; set; }
         private string Wallet { get; set; }
         private IBambooNodeApi Node { get; set; }
+
+        public string Server => Url;
+        public string Protocol => "bamboo+http";
 
         public BambooNodeConnectionProvider(IHttpClientFactory httpClientFactory, Channels channels, IConfiguration configuration, ILogger<BambooNodeConnectionProvider> logger, ILoggerFactory loggerFactory)
         {
@@ -365,6 +370,15 @@ namespace dcrpt_miner
         {
             Dispose(disposing: true);
             GC.SuppressFinalize(this);
+        }
+
+        public long Ping()
+        {
+            using(var ping = new Ping()) {
+                var uri = new Uri(Url);
+                var reply = ping.Send(uri.DnsSafeHost);
+                return reply.RoundtripTime;
+            }
         }
     }
 }

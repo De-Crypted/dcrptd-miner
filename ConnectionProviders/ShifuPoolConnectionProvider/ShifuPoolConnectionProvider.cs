@@ -8,6 +8,7 @@ using Microsoft.Extensions.Configuration;
 using Unclassified.Net;
 using Microsoft.Extensions.Logging;
 using System.Linq;
+using System.Net.NetworkInformation;
 
 namespace dcrpt_miner 
 {
@@ -31,6 +32,14 @@ namespace dcrpt_miner
         private bool disposedValue;
         private bool DevFeeRunning { get; set; }
         private bool DevFeeStopping { get; set; }
+
+        public string Server {
+            get {
+                var uri = new Uri(Url);
+                return uri.Host + ":" + uri.Port;
+            }
+        }
+        public string Protocol => "shifu+tcp";
 
         public ShifuPoolConnectionProvider(IConfiguration configuration, Channels channels, ILogger<ShifuPoolConnectionProvider> logger)
         {
@@ -188,19 +197,12 @@ namespace dcrpt_miner
                 return;
             }
 
-            var parts = Url.Replace("/", String.Empty).Split(':');
-
-            if (parts.Length != 3) {
-                throw new Exception("Invalid hostname: " + Url);
-            }
-
-            var hostname = parts[1];
-            var port = int.Parse(parts[2]);
+            var uri = new Uri(Url);
 
             Client = new AsyncTcpClient 
             {
-                HostName = hostname,
-                Port = port,
+                HostName = uri.Host,
+                Port = uri.Port,
                 AutoReconnect = false,
                 ConnectedCallback = OnConnected,
                 ReceivedCallback = OnReceived,
@@ -328,9 +330,9 @@ namespace dcrpt_miner
 
                 if (json.Contains("Ping")) {
                     Logger.LogDebug("PacketType = Ping");
-                    var ping = JsonSerializer.Deserialize(json, typeof(Ping)) as Ping;
+                    var ping = JsonSerializer.Deserialize(json, typeof(Ping2)) as Ping2;
                     if (ping.type == "Ping") {
-                        var pong = JsonSerializer.Serialize(new Pong());
+                        var pong = JsonSerializer.Serialize(new Pong2());
                         var pongData = Encoding.ASCII.GetBytes(pong + "\n");
                         await client.Send(new ArraySegment<byte>(pongData, 0, pongData.Length));
                     }
@@ -418,12 +420,12 @@ namespace dcrpt_miner
             public string msg { get; set; }
         }
 
-        private class Ping 
+        private class Ping2
         {
             public string type { get; set; }
         }
 
-        private class Pong 
+        private class Pong2
         {
             public string type { get; set; } = "Pong";
         }
@@ -446,6 +448,15 @@ namespace dcrpt_miner
         {
             Dispose(disposing: true);
             GC.SuppressFinalize(this);
+        }
+
+        public long Ping()
+        {
+            using(var ping = new Ping()) {
+                var uri = new Uri(Url);
+                var reply = ping.Send(uri.DnsSafeHost);
+                return reply.RoundtripTime;
+            }
         }
     }
 }

@@ -17,6 +17,10 @@ namespace dcrpt_miner
         private Channels Channels { get; }
         private HubConnection Connection { get; set; }
 
+        public string Server => throw new NotImplementedException();
+
+        public string Protocol => throw new NotImplementedException();
+
         public DcrptConnectionProvider(IConfiguration configuration, Channels channels)
         {
             Configuration = configuration ?? throw new System.ArgumentNullException(nameof(configuration));
@@ -84,6 +88,11 @@ namespace dcrpt_miner
         }
 
         public Task RunDevFeeAsync(CancellationToken cancellationToken)
+        {
+            throw new NotImplementedException();
+        }
+
+        public long Ping()
         {
             throw new NotImplementedException();
         }

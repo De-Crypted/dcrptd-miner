@@ -8,8 +8,11 @@ namespace dcrpt_miner
     {
         string JobName { get; }
         string SolutionName { get; }
-        public Task RunAsync(string url);
-        public Task RunDevFeeAsync(CancellationToken cancellationToken);
-        public Task<SubmitResult> SubmitAsync(byte[] solution);
+        string Server { get; }
+        string Protocol { get; }
+        Task RunAsync(string url);
+        Task RunDevFeeAsync(CancellationToken cancellationToken);
+        Task<SubmitResult> SubmitAsync(byte[] solution);
+        long Ping();
     }
 }

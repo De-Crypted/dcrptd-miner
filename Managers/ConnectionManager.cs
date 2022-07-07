@@ -65,6 +65,7 @@ namespace dcrpt_miner
                         SafeConsole.WriteLine(ConsoleColor.DarkGray, "{0:T}: Connecting to {1}", DateTime.Now, _url);
 
                         CurrentProvider = GetConnectionProvider(_url);
+                        StatusManager.RegisterConnectionProvider(CurrentProvider);
 
                         try {
                             await CurrentProvider.RunAsync(_url);
