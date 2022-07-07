@@ -130,17 +130,14 @@ namespace dcrpt_miner
             var total = (double)(accepted + dropped + rejected);
 
             var sb = new StringBuilder();
-            //sb.AppendLine("|---------------------------------------------------------------|");
-            // FIXME: hack to get alignment correct
-            //sb.AppendFormat("| Periodic Report - {0}{1}|{2}", AlgoName, AlgoName == "n/a" ? "\t\t\t" : AlgoName == "sha256bmb" ? "\t\t\t\t\t\t" : "\t\t\t\t\t", Environment.NewLine);
             sb.AppendLine();
             sb.AppendLine("| Periodic Report \t\t\t\t\t\t");
-            sb.AppendLine("|--------------------------------------------------------------");
+            sb.AppendLine("|----------------------------------------------------");
             sb.AppendFormat("| Algorithm\t{0}{1}", AlgoName, Environment.NewLine);
             sb.AppendFormat("| Server\t{0}{1}", ConnectionProvider != null ? ConnectionProvider.Server : "n/a", Environment.NewLine);
             sb.AppendFormat("| Protocol\t{0}{1}", ConnectionProvider != null ? ConnectionProvider.Protocol : "n/a", Environment.NewLine);
             sb.AppendFormat("| Latency\t{0} ms{1}", ConnectionProvider != null ? ConnectionProvider.Ping() : "n/a", Environment.NewLine);
-            sb.AppendLine("|--------------------------------------------------------------");
+            sb.AppendLine("|----------------------------------------------------");
             sb.AppendFormat("| Accepted \t{0}\t\t{1:N0}%\t\t{2:N1} / min{3}", 
                 accepted,
                 total > 0 ? accepted / total * 100 : 0,
@@ -156,7 +153,7 @@ namespace dcrpt_miner
                 total > 0 ? rejected / total * 100 : 0,
                 // Watch.Elapsed.TotalMinutes > 0 ? rejected / Watch.Elapsed.TotalMinutes : rejected, 
                 Environment.NewLine);
-            sb.AppendLine("|--------------------------------------------------------------");
+            sb.AppendLine("|----------------------------------------------------");
             sb.AppendLine("| Hashrates\t1min    \t5min\t\t30min");
 
             ulong totalHashes = 0;
@@ -196,7 +193,7 @@ namespace dcrpt_miner
                 sb.AppendFormat("| Hashrate (Total) \t{0:N2} {1}{2}", hashrate, unit, Environment.NewLine);
             }
 
-            sb.AppendLine("|--------------------------------------------------------------");
+            sb.AppendLine("|----------------------------------------------------");
             sb.AppendFormat("| Uptime {0} days, {1} hours, {2} minutes", Watch.Elapsed.Days, Watch.Elapsed.Hours, Watch.Elapsed.Minutes);
             sb.AppendLine();
             
