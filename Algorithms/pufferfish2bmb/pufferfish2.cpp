@@ -104,7 +104,7 @@ size_t pf_decode(void *dst, char *src, size_t size)
     return (dptr - (uint8_t *) dst);
 }
 
-void pf_hashpass(const void *salt_r, const size_t salt_sz, const uint8_t cost_t, const uint8_t cost_m,
+void pf_hashpass(const uint8_t cost_t, const uint8_t cost_m,
                  const void *key_r, const size_t key_sz, uint8_t *out)
 {
     EVP_MD_CTX *ctx(EVP_MD_CTX_create());
@@ -185,44 +185,11 @@ void pf_hashpass(const void *salt_r, const size_t salt_sz, const uint8_t cost_t,
     EVP_MD_CTX_free(ctx);
 }
 
-int pf_mksalt( const uint8_t cost_t, const uint8_t cost_m, char *salt)
-{
-    size_t bytes = 0;
-    pf_salt settings;
-    memset(&settings, 0, sizeof(pf_salt));
-
-    settings.cost_t = cost_t;
-    settings.cost_m = cost_m;
-
-    memset(salt, 0, PF_SALTSPACE);
-    memmove(salt, PF_ID, PF_ID_SZ);
-
-    bytes = pf_encode(salt + PF_ID_SZ, (void *)&settings, sizeof(pf_salt));
-    salt[PF_ID_SZ + bytes] = '$';
-
-    return 0;
-}
-
-int pf_crypt(const char *salt, const void *pass, const size_t pass_sz, char *hash)
+int pf_crypt(const void *pass, const size_t pass_sz, const size_t cost_t, const size_t cost_m, char *hash)
 {
     uint8_t buf[PF_DIGEST_LENGTH] = { 0 };
-    size_t bytes = 0;
-    pf_salt settings;
-    char *p;
 
-    if (strncmp(salt, PF_ID, PF_ID_SZ))
-        return EINVAL;
-
-    if ((p = (char*)strrchr(salt, '$')) == NULL)
-        return EINVAL;
-
-    memset(hash, 0, PF_HASHSPACE);
-    memmove(hash, salt, p - salt + 1);
-
-    if ((bytes = pf_decode((void *)&settings, (char *)(salt + PF_ID_SZ), p - salt - PF_ID_SZ)) != sizeof(pf_salt))
-        return EINVAL;
-
-    pf_hashpass(settings.salt, PF_SALT_SZ, settings.cost_t, settings.cost_m, pass, pass_sz, buf);
+    pf_hashpass(cost_t, cost_m, pass, pass_sz, buf);
     pf_encode(hash + PF_SALTSPACE - 1, buf, PF_DIGEST_LENGTH);
 
     return 0;
@@ -230,17 +197,5 @@ int pf_crypt(const char *salt, const void *pass, const size_t pass_sz, char *has
 
 int pf_newhash(const char *pass, const size_t pass_sz, const size_t cost_t, const size_t cost_m, char *hash)
 {
-    char salt[PF_SALTSPACE];
-    int ret = 0;
-
-    if (cost_t > 63 || cost_m > 53)
-        return EOVERFLOW;
-
-    if ((ret = pf_mksalt(cost_t, cost_m, salt)) != 0)
-        return ret;
-
-    if ((ret = pf_crypt(salt, pass, pass_sz, hash)) != 0)
-        return ret;
-
-    return 0;
+    return pf_crypt(pass, pass_sz, cost_t, cost_m, hash);
 }

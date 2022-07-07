@@ -123,7 +123,7 @@ namespace dcrpt_miner
         {
             CollectHashrateSnapshot();
 
-            Computer computer = new Computer
+            /*Computer computer = new Computer
             {
                 IsCpuEnabled = true,
                 IsGpuEnabled = false,
@@ -161,7 +161,7 @@ namespace dcrpt_miner
                 }
             }
             
-            computer.Close();
+            computer.Close();*/
 
             var accepted = Interlocked.Read(ref AcceptedShares);
             var dropped = Interlocked.Read(ref DroppedShares);

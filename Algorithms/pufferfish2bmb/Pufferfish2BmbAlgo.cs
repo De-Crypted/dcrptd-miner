@@ -15,20 +15,6 @@ using static dcrpt_miner.StatusManager;
 
 namespace dcrpt_miner 
 {
-    /*static class Native32
-    {
-        [DllImport("kernel32.dll")]
-        public static extern IntPtr GetCurrentThread();
-
-		[DllImport("kernel32")]
-		public static extern int GetCurrentThreadId();
-
-        [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
-        public static extern int GetCurrentProcessorNumber();
-
-        [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
-        public static extern UIntPtr SetThreadAffinityMask(IntPtr handle, UIntPtr mask);
-    }*/
 
     public class Pufferfish2BmbAlgo : IAlgorithm
     {
@@ -97,7 +83,19 @@ namespace dcrpt_miner
             var rand = new Random(BitConverter.ToInt32(buffer, 0));
 
             Span<byte> concat = new byte[64];
-            Span<byte> hash = new byte[119]; // TODO: verify this matches PF_HASHSPACE in all cases
+            Span<byte> hash = new byte[119] { 
+                36, 80, 70, 50, 36, 46, 46, 101, 46, 46, 
+                46, 46, 46, 46, 46, 46, 46, 46, 46, 46, 
+                46, 46, 46, 46, 46, 46, 46, 46, 46, 36, 
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+                0, 0, 0, 0, 0, 0, 0, 0, 0 };
             Span<byte> solution = new byte[32];
 
             int challengeBytes = job.Difficulty / 8;
@@ -176,50 +174,43 @@ namespace dcrpt_miner
             }
         }
 
-        // // TODO: override finalizer only if 'Dispose(bool disposing)' has code to free unmanaged resources
-        // ~Pufferfish2BmbAlgo()
-        // {
-        //     // Do not change this code. Put cleanup code in 'Dispose(bool disposing)' method
-        //     Dispose(disposing: false);
-        // }
-
         public void Dispose()
         {
-            // Do not change this code. Put cleanup code in 'Dispose(bool disposing)' method
             Dispose(disposing: true);
             GC.SuppressFinalize(this);
         }
 
         public void RunBenchmark()
         {
-            Computer computer = new Computer
-            {
-                IsCpuEnabled = true,
-                IsGpuEnabled = false,
-                IsMemoryEnabled = false,
-                IsMotherboardEnabled = false,
-                IsControllerEnabled = false,
-                IsNetworkEnabled = false,
-                IsStorageEnabled = false
-            };
-
-            computer.Open();
-            computer.Accept(new UpdateVisitor());
-
             ISensor powerSensor = null;
+            Computer computer = null;
 
-            foreach (IHardware hardware in computer.Hardware)
-            {
-                foreach (ISensor sensor in hardware.Sensors)
+            try {
+                computer = new Computer
                 {
-                    if (sensor.SensorType == SensorType.Power) {
-                        Console.WriteLine("Found power sensor {0}", sensor.Name);
-                    }
+                    IsCpuEnabled = true,
+                    IsGpuEnabled = false,
+                    IsMemoryEnabled = false,
+                    IsMotherboardEnabled = false,
+                    IsControllerEnabled = false,
+                    IsNetworkEnabled = false,
+                    IsStorageEnabled = false
+                };
 
-                    if (sensor.SensorType == SensorType.Power && sensor.Name == "Package") {
-                        powerSensor = sensor;
+                computer.Open();
+                computer.Accept(new UpdateVisitor());
+
+                foreach (IHardware hardware in computer.Hardware)
+                {
+                    foreach (ISensor sensor in hardware.Sensors)
+                    {
+                        if (sensor.SensorType == SensorType.Power && (sensor.Name == "Package" || sensor.Name == "CPU Package")) {
+                            powerSensor = sensor;
+                        }
                     }
                 }
+            } catch (Exception) {
+                Console.WriteLine("Power Sensors not supported");
             }
 
             var threads = Environment.ProcessorCount;
@@ -240,32 +231,7 @@ namespace dcrpt_miner
                 var threadList = new List<Thread>();
 
                 for (int x = 0; x <= i; x++) {
-                    var tid = x;
                     var thread = new Thread(() => {
-                        //Thread.BeginThreadAffinity();
-                        /*IntPtr osThread = Native32.GetCurrentThread();
-
-                        var bits = 0UL;
-                        
-                        if (tid == 0) {
-                            bits = 1UL << 0;
-                        }
-
-                        if (tid == 1) {
-                            bits = 1UL << 1;
-                        }
-
-                        if (tid == 0) {
-                            bits = 1UL << 2;
-                        }
-
-                        if (tid == 0) {
-                            bits = 1UL << 3;
-                        }
-
-                        UIntPtr mask = new UIntPtr(bits);
-
-                        UIntPtr lastaffinity = Native32.SetThreadAffinityMask(osThread, mask);*/
                         Thread.BeginThreadAffinity();
                         RunBenchmarkThread();
                     });
@@ -303,11 +269,14 @@ namespace dcrpt_miner
                     avgPowerUsage, 
                     avgPowerUsage / (i + 1));
             }
-
-            computer.Close();
+    
             tsw.Stop();
             Console.WriteLine("Benchmark completed in {0} seconds", tsw.Elapsed.TotalSeconds);
             Console.ForegroundColor = ConsoleColor.White;
+
+            if (computer != null) {
+                computer.Close();
+            }
         }
 
         public unsafe void RunBenchmarkThread()
