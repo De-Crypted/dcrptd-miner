@@ -38,6 +38,8 @@ namespace dcrpt_miner
                     break;
                     default:
                         // print possible algorithms
+                        Console.WriteLine("Invalid algorithm '{0}' specified. Possible values are:", benchmark);
+                        Console.WriteLine("\tpufferfish2bmb");
                     return;
                 }
 
@@ -79,7 +81,7 @@ namespace dcrpt_miner
             Console.WriteLine("dcrptd miner v" + version.ToString());
 
             Console.Title = "dcrptd miner " + version.ToString();
-            await host.StartAsync();
+            var proc = await host.StartAsync();
 
             Console.TreatControlCAsInput = true;
             while (true) {
@@ -88,7 +90,9 @@ namespace dcrpt_miner
                 switch (key.Key) {
                     case ConsoleKey.C:
                         if (key.Modifiers == ConsoleModifiers.Control)  {
-                            Process.GetCurrentProcess().Kill();
+                            //Process.GetCurrentProcess().Kill();
+                            await proc.StopAsync();
+                            return;
                         }
                     break;
                     case ConsoleKey.H:

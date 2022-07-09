@@ -64,8 +64,12 @@ namespace dcrpt_miner
                     new Thread(() => {
                         var token = ThreadSource.Token;
                         while (!token.IsCancellationRequested) {
-                            var job = queue.Take(token);
-                            DoCPUWork(tid, job, Channels, PauseEvent);
+                            try {
+                                var job = queue.Take(token);
+                                DoCPUWork(tid, job, Channels, PauseEvent);
+                            } catch (OperationCanceledException ex) {
+                               logger.LogDebug("Operation cancelled", ex);
+                            }
                         }
                     }).UnsafeStart();
 
@@ -101,8 +105,12 @@ namespace dcrpt_miner
                         var context = InitializeGPUThread(gpu);
 
                         while (!token.IsCancellationRequested) {
-                            var job = queue.Take(token);
-                            DoGPUWork(tid, gpu, context, job, Channels, PauseEvent);
+                            try {
+                                var job = queue.Take(token);
+                                DoGPUWork(tid, gpu, context, job, Channels, PauseEvent);
+                            } catch (OperationCanceledException ex) {
+                                logger.LogDebug("Operation cancelled", ex);
+                            }
                         }
 
                         Cl.clReleaseMemObject(context.ConcatBuf)

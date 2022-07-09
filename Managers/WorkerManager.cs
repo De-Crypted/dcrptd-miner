@@ -69,7 +69,7 @@ namespace dcrpt_miner
             IAlgorithm algo = null;
 
             Logger.LogDebug("Waiting for job");
-            await foreach(var job in Channels.Jobs.Reader.ReadAllAsync(ThreadSource.Token)) {
+            await foreach(var job in Channels.Jobs.Reader.ReadAllAsync(token)) {
                 TokenSource.Cancel();
                 TokenSource.Dispose();
                 TokenSource = new CancellationTokenSource();
@@ -101,6 +101,10 @@ namespace dcrpt_miner
                 Logger.LogDebug("Assigning job to workers");
 
                 algo.ExecuteJob(job);
+            }
+
+            if (algo != null) {
+                algo.Dispose();
             }
         }
     }

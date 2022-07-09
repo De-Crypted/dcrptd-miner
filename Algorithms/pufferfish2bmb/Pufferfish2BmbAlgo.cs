@@ -60,8 +60,12 @@ namespace dcrpt_miner
                     Thread.BeginThreadAffinity();
                     var token = ThreadSource.Token;
                     while (!token.IsCancellationRequested) {
-                        var job = queue.Take(token);
-                        DoCPUWork(tid, job, channels, PauseEvent);
+                        try {
+                            var job = queue.Take(token);
+                            DoCPUWork(tid, job, channels, PauseEvent);
+                        } catch (OperationCanceledException ex) {
+                            logger.LogDebug("Operation cancelled", ex);
+                        }
                     }
                 }).UnsafeStart();
 
@@ -166,6 +170,7 @@ namespace dcrpt_miner
                 if (disposing)
                 {
                     // TODO: dispose managed state (managed objects)
+                    ThreadSource.Cancel();
                 }
 
                 // TODO: free unmanaged resources (unmanaged objects) and override finalizer

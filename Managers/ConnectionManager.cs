@@ -73,6 +73,10 @@ namespace dcrpt_miner
                             SafeConsole.WriteLine(ConsoleColor.DarkRed, ex.ToString());
                         }
 
+                        if (token.IsCancellationRequested) {
+                            return;
+                        }
+
                         SafeConsole.WriteLine(ConsoleColor.DarkGray, "{0:T}: Disconnected from {1}", DateTime.Now, _url);
                         CurrentProvider.Dispose();
                     }
@@ -81,6 +85,8 @@ namespace dcrpt_miner
                 } while (keepReconnecting);
 
                 SafeConsole.WriteLine(ConsoleColor.DarkRed, "{0:T}: Miner shutting down...", DateTime.Now);
+
+                // force kill
                 Process.GetCurrentProcess().Kill();
             }).UnsafeStart();
 
@@ -105,6 +111,9 @@ namespace dcrpt_miner
         {
             Logger.LogDebug("Stopping ConnectionManager thread");
             ThreadSource.Cancel();
+            if (CurrentProvider != null) {
+                CurrentProvider.Dispose();
+            }
             return Task.CompletedTask;
         }
 

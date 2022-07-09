@@ -2,7 +2,7 @@
     "sha256bmb": {
         "gpu": {
             "_enabled": "Enable or disable gpu miner",
-            "enabled": true,
+            "enabled": false,
             "_device": "Select GPU by device id or name, set to null to auto detect.",
             "device": null,
             "_work_multiplier": "Specifies how much work to queue on gpu. Set to null for auto detect",
@@ -14,9 +14,9 @@
         },
         "cpu": {
             "_enabled": "Enable or disable cpu miner",
-            "enabled": false,
+            "enabled": true,
             "_threads": "Set amount of threads to run. -1 = auto detect thread count",
-            "threads": -1
+            "threads": 1
         }
     }
 }

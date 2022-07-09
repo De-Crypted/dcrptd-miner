@@ -96,5 +96,10 @@ namespace dcrpt_miner
         {
             throw new NotImplementedException();
         }
+
+        public Task StopAsync()
+        {
+            throw new NotImplementedException();
+        }
     }
 }
