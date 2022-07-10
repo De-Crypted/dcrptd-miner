@@ -33,4 +33,4 @@ esac
 cp pufferfish2-apple-m1.so pufferfish2
 
 popd
-dotnet run
+dotnet run "${@:2}"
