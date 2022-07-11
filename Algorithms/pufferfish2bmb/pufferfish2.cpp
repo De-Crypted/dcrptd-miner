@@ -104,11 +104,8 @@ size_t pf_decode(void *dst, char *src, size_t size)
     return (dptr - (uint8_t *) dst);
 }
 
-void pf_hashpass(const uint8_t cost_t, const uint8_t cost_m,
-                 const void *key_r, const size_t key_sz, uint8_t *out)
+void pf_hashpass(const void *key_r, const size_t key_sz, uint8_t *out)
 {
-    EVP_MD_CTX *ctx(EVP_MD_CTX_create());
-
     unsigned char key[PF_DIGEST_LENGTH]  = { 0 };
     // static salt used
     unsigned char salt[PF_DIGEST_LENGTH] = { 101, 232, 121, 212, 125, 241, 222, 240, 175, 55, 141, 50, 233, 244, 254, 58, 130, 79, 181, 30, 33, 67, 192, 51, 34, 222, 242, 41, 54, 26, 243, 177, 122, 114, 74, 61, 101, 61, 5, 203, 159, 65, 244, 185, 13, 9, 232, 226, 136, 106, 120, 218, 72, 83, 125, 28, 250, 98, 151, 122, 130, 231, 55, 78 };
@@ -117,18 +114,15 @@ void pf_hashpass(const uint8_t cost_t, const uint8_t cost_m,
     uint64_t *S[PF_SBOX_N], P[18];
     uint64_t L  = 0, R =  0;
     uint64_t LL = 0, RR = 0;
-    uint64_t count = 0, sbox_sz = 0;
+    uint64_t count = 2, sbox_sz = 8192;
+    uint8_t log2_sbox_sz = 13;
 
-    uint8_t log2_sbox_sz = 0;
     int i, j, k;
 
     key_u64  = (uint64_t *) &key;
     salt_u64 = (uint64_t *) &salt;
 
-    log2_sbox_sz = cost_m + 5;
-    sbox_sz = 1ULL << log2_sbox_sz;
-
-    PF_HMAC(ctx, salt, PF_DIGEST_LENGTH, (unsigned char*)key_r, key_sz, key);
+    PF_HMAC(salt, PF_DIGEST_LENGTH, (unsigned char*)key_r, key_sz, key);
 
     for (i = 0; i < PF_SBOX_N; i++)
     {
@@ -136,14 +130,14 @@ void pf_hashpass(const uint8_t cost_t, const uint8_t cost_m,
 
         for (j = 0; j < sbox_sz; j += (PF_DIGEST_LENGTH / sizeof(uint64_t)))
         {
-            PF_HMAC(ctx, key, PF_DIGEST_LENGTH, salt, PF_DIGEST_LENGTH, key);
+            PF_HMAC(key, PF_DIGEST_LENGTH, salt, PF_DIGEST_LENGTH, key);
 
             for (k = 0; k < (PF_DIGEST_LENGTH / sizeof(uint64_t)); k++)
                 S[i][j + k] = key_u64[k];
         }
     }
 
-    HASH_SBOX(ctx, key);
+    HASH_SBOX(key);
 
     P[ 0] = 0x243f6a8885a308d3ULL ^ key_u64[0];
     P[ 1] = 0x13198a2e03707344ULL ^ key_u64[1];
@@ -167,35 +161,32 @@ void pf_hashpass(const uint8_t cost_t, const uint8_t cost_m,
     ENCRYPT_P;
     ENCRYPT_S;
 
-    count = (1ULL << cost_t) + 1;
     do
     {
         L = R = 0;
-        HASH_SBOX(ctx, key);
+        HASH_SBOX(key);
         REKEY(key);
     }
     while (--count);
 
-    HASH_SBOX(ctx, key);
+    HASH_SBOX(key);
     memcpy(out, key, PF_DIGEST_LENGTH);
 
     for (i = 0; i < PF_SBOX_N; i++)
         free(S[i]);
-
-    EVP_MD_CTX_free(ctx);
 }
 
-int pf_crypt(const void *pass, const size_t pass_sz, const size_t cost_t, const size_t cost_m, char *hash)
+int pf_crypt(const void *pass, const size_t pass_sz, char *hash)
 {
     uint8_t buf[PF_DIGEST_LENGTH] = { 0 };
 
-    pf_hashpass(cost_t, cost_m, pass, pass_sz, buf);
+    pf_hashpass(pass, pass_sz, buf);
     pf_encode(hash + PF_SALTSPACE - 1, buf, PF_DIGEST_LENGTH);
 
     return 0;
 }
 
-int pf_newhash(const char *pass, const size_t pass_sz, const size_t cost_t, const size_t cost_m, char *hash)
+int pf_newhash(const char *pass, const size_t pass_sz, char *hash)
 {
-    return pf_crypt(pass, pass_sz, cost_t, cost_m, hash);
+    return pf_crypt(pass, pass_sz, hash);
 }

@@ -104,6 +104,7 @@ namespace dcrpt_miner
 
             int challengeBytes = job.Difficulty / 8;
             int remainingBits = job.Difficulty - (8 * challengeBytes);
+            int remainingValue = 255 >> remainingBits;
 
             for (int i = 0; i < 32; i++) concat[i] = job.Nonce[i];
             for (int i = 33; i < 64; i++) concat[i] = (byte)rand.Next(0, 256);
@@ -119,10 +120,10 @@ namespace dcrpt_miner
                 {
                     ++*locPtr;
 
-                    Unmanaged.pf_newhash(ptr, 64, 0, 8, hashPtr);
+                    Unmanaged.pf_newhash(ptr, 64, hashPtr);
                     var sha256Hash = sha256.ComputeHash(hash.ToArray());
 
-                    if (checkLeadingZeroBits(sha256Hash, challengeBytes, remainingBits))
+                    if (checkLeadingZeroBits2(sha256Hash, challengeBytes, remainingValue))
                     {
                         channels.Solutions.Writer.TryWrite(concat.Slice(32).ToArray());
                     }
@@ -155,12 +156,23 @@ namespace dcrpt_miner
             else return true;
         }
 
+        // TODO: Move to util class or something??
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private unsafe bool checkLeadingZeroBits2(byte[] hash, int challengeBytes, int remainingValue) {
+
+            for (int i = 0; i < challengeBytes; i++) {
+                if (hash[i] != 0) return false;
+            }
+
+            return hash[challengeBytes] <= remainingValue;
+        }
+
         unsafe class Unmanaged
         {
             [DllImport("Algorithms/pufferfish2bmb/pufferfish2", ExactSpelling = true)]
             [SuppressGCTransition]
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            public static extern int pf_newhash(byte* pass, int pass_sz, int cost_t, int cost_m, byte* hash);
+            public static extern int pf_newhash(byte* pass, int pass_sz, byte* hash);
         }
 
         protected virtual void Dispose(bool disposing)
@@ -308,7 +320,7 @@ namespace dcrpt_miner
                 {
                     ++*locPtr;
 
-                    Unmanaged.pf_newhash(ptr, 64, 0, 8, hashPtr);
+                    Unmanaged.pf_newhash(ptr, 64, hashPtr);
                     var sha256Hash = sha256.ComputeHash(hash.ToArray());
 
                     if (checkLeadingZeroBits(sha256Hash, challengeBytes, remainingBits))

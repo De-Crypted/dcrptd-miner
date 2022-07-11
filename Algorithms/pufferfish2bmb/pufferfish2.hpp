@@ -56,28 +56,26 @@ typedef struct pf_salt
 #define MAX_BLOCK_SIZE 144
 #define DIGEST_SIZE 64
 
-void PF_HMAC(EVP_MD_CTX *mdctx, unsigned char *key, unsigned int key_sz, const unsigned char *data, unsigned int data_sz, unsigned char *out)
+void PF_HMAC(unsigned char *key, unsigned int key_sz, const unsigned char *data, unsigned int data_sz, unsigned char *out)
 {
-    const EVP_MD *md = EVP_sha512();
-
-    unsigned int len;
+    SHA512_CTX sha512;
 
     unsigned char kx[BLOCKSIZE];
     for (size_t i = 0; i < key_sz; i++) kx[i] = I_PAD ^ key[i];
     for (size_t i = key_sz; i < BLOCKSIZE; i++) kx[i] = I_PAD ^ 0;
 
-    EVP_DigestInit_ex(mdctx, md, NULL);
-    EVP_DigestUpdate(mdctx, kx, BLOCKSIZE);
-    EVP_DigestUpdate(mdctx, data, data_sz);
+    SHA512_Init(&sha512);
+    SHA512_Update(&sha512, kx, BLOCKSIZE);
+    SHA512_Update(&sha512, data, data_sz);
 
     for (size_t i = 0; i < key_sz; i++) kx[i] = O_PAD ^ key[i];
     for (size_t i = key_sz; i < BLOCKSIZE; i++) kx[i] = O_PAD ^ 0;
 
-    EVP_DigestFinal_ex(mdctx, out, &len);
-    EVP_DigestInit_ex(mdctx, md, NULL);
-    EVP_DigestUpdate(mdctx, kx, BLOCKSIZE);
-    EVP_DigestUpdate(mdctx, out, len);
-    EVP_DigestFinal_ex(mdctx, out, &len);
+    SHA512_Final(out, &sha512);
+    SHA512_Init(&sha512);
+    SHA512_Update(&sha512, kx, BLOCKSIZE);
+    SHA512_Update(&sha512, out, DIGEST_SIZE);
+    SHA512_Final(out, &sha512);
 }
   
 #define ENCRYPT_P                                                                        \
@@ -101,11 +99,11 @@ void PF_HMAC(EVP_MD_CTX *mdctx, unsigned char *key, unsigned int key_sz, const u
     for (i = 0; i < sbox_sz; i += 2)                                                     \
         EXPANDSTATE(salt_u64[i & 7], salt_u64[(i + 1) & 7], S[3][i], S[3][i + 1]);
 
-#define HASH_SBOX(ctx, x)                                                                     \
-    PF_HMAC(ctx, x, PF_DIGEST_LENGTH, (unsigned char*)S[0], sbox_sz * sizeof(uint64_t), x);                   \
-    PF_HMAC(ctx, x, PF_DIGEST_LENGTH, (unsigned char*)S[1], sbox_sz * sizeof(uint64_t), x);                   \
-    PF_HMAC(ctx, x, PF_DIGEST_LENGTH, (unsigned char*)S[2], sbox_sz * sizeof(uint64_t), x);                   \
-    PF_HMAC(ctx, x, PF_DIGEST_LENGTH, (unsigned char*)S[3], sbox_sz * sizeof(uint64_t), x);
+#define HASH_SBOX(x)                                                                     \
+    PF_HMAC(x, PF_DIGEST_LENGTH, (unsigned char*)S[0], sbox_sz * sizeof(uint64_t), x);                   \
+    PF_HMAC(x, PF_DIGEST_LENGTH, (unsigned char*)S[1], sbox_sz * sizeof(uint64_t), x);                   \
+    PF_HMAC(x, PF_DIGEST_LENGTH, (unsigned char*)S[2], sbox_sz * sizeof(uint64_t), x);                   \
+    PF_HMAC(x, PF_DIGEST_LENGTH, (unsigned char*)S[3], sbox_sz * sizeof(uint64_t), x);
 
 #define F(x)                                                                             \
 (                                                                                        \
@@ -221,4 +219,4 @@ const static unsigned char idx64[0x80] = {
 #define EXPORT_DLL extern "C"
 #endif
 
-EXPORT_DLL int pf_newhash(const char *pass, const size_t pass_sz, const size_t cost_t, const size_t cost_m, char *hash);
+EXPORT_DLL int pf_newhash(const char *pass, const size_t pass_sz, char *hash);
