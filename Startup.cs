@@ -22,6 +22,7 @@ namespace dcrpt_miner
             services.AddTransient<DcrptConnectionProvider>();
             services.AddTransient<ShifuPoolConnectionProvider>();
             services.AddTransient<BambooNodeConnectionProvider>();
+            services.AddTransient<StratumConnectionProvider>();
             services.AddSingleton<Channels>();
 
             services.AddHostedService<WorkerManager>();

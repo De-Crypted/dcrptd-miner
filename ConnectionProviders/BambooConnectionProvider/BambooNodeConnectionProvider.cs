@@ -64,7 +64,7 @@ namespace dcrpt_miner
             return Task.CompletedTask;
         }
 
-        public async Task<SubmitResult> SubmitAsync(byte[] solution)
+        public async Task<SubmitResult> SubmitAsync(JobSolution solution)
         {
             using (var stream = new MemoryStream())
             using (var writer = new BinaryWriter(stream))
@@ -78,7 +78,7 @@ namespace dcrpt_miner
                 writer.Write(CurrentBlock.Transactions.Count);
                 writer.Write(CurrentBlock.LastHash);
                 writer.Write(CurrentBlock.RootHash);
-                writer.Write(solution);
+                writer.Write(solution.Solution);
 
                 foreach (var transaction in CurrentBlock.Transactions)
                 {

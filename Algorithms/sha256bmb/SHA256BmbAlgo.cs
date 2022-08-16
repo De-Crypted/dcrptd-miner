@@ -144,8 +144,8 @@ namespace dcrpt_miner
             Span<byte> hash = stackalloc byte[32];
             Span<byte> solution = stackalloc byte[32];
 
-            int challengeBytes = job.Difficulty / 8;
-            int remainingBits = job.Difficulty - (8 * challengeBytes);
+            int challengeBytes = ((int)job.Difficulty) / 8;
+            int remainingBits = ((int)job.Difficulty) - (8 * challengeBytes);
 
             for (int i = 0; i < 32; i++) concat[i] = job.Nonce[i];
             for (int i = 33; i < 64; i++) concat[i] = (byte)rand.Next(0, 256);
@@ -163,9 +163,13 @@ namespace dcrpt_miner
 
                     Unmanaged.SHA256Ex(ptr, hashPtr);
 
-                    if (checkLeadingZeroBits(hashPtr, job.Difficulty, challengeBytes, remainingBits))
+                    if (checkLeadingZeroBits(hashPtr, ((int)job.Difficulty), challengeBytes, remainingBits))
                     {
-                        channels.Solutions.Writer.TryWrite(concat.Slice(32).ToArray());
+                        channels.Solutions.Writer.TryWrite(new JobSolution
+                        {
+                            Nonce = job.Nonce,
+                            Solution = concat.Slice(32).ToArray()
+                        });
                     }
 
                     if (count == 0) {
@@ -434,7 +438,11 @@ namespace dcrpt_miner
                         }
 
                         Logger.LogDebug("Found solution, nonce = {}", solution.AsString());
-                        channels.Solutions.Writer.TryWrite(solution);
+                        channels.Solutions.Writer.TryWrite(new JobSolution
+                        {
+                            Nonce = job.Nonce,
+                            Solution = solution
+                        });
                     }
 
                     Marshal.WriteByte(buf2, 0, 0);

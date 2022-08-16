@@ -90,7 +90,6 @@ namespace dcrpt_miner
                 switch (key.Key) {
                     case ConsoleKey.C:
                         if (key.Modifiers == ConsoleModifiers.Control)  {
-                            //Process.GetCurrentProcess().Kill();
                             await proc.StopAsync();
                             return;
                         }

@@ -1,8 +1,10 @@
 using System;
+using System.Collections;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Net;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
@@ -102,9 +104,10 @@ namespace dcrpt_miner
                 0, 0, 0, 0, 0, 0, 0, 0, 0 };
             Span<byte> solution = new byte[32];
 
-            int challengeBytes = job.Difficulty / 8;
-            int remainingBits = job.Difficulty - (8 * challengeBytes);
-            int remainingValue = 255 >> remainingBits;
+            var diffInt = ((int)Math.Floor(job.Difficulty));
+            var diffFrac = job.Difficulty - diffInt;
+
+            var target = (ulong.MaxValue >> diffInt) + ((ulong.MaxValue >> diffInt) * diffFrac);
 
             for (int i = 0; i < 32; i++) concat[i] = job.Nonce[i];
             for (int i = 33; i < 64; i++) concat[i] = (byte)rand.Next(0, 256);
@@ -123,9 +126,16 @@ namespace dcrpt_miner
                     Unmanaged.pf_newhash(ptr, 64, hashPtr);
                     var sha256Hash = sha256.ComputeHash(hash.ToArray());
 
-                    if (checkLeadingZeroBits2(sha256Hash, challengeBytes, remainingValue))
+                    var asLong = BitConverter.ToInt64(sha256Hash.Take(8).ToArray(), 0);
+                    var result = (ulong)IPAddress.NetworkToHostOrder(asLong);
+
+                    if (result <= target)
                     {
-                        channels.Solutions.Writer.TryWrite(concat.Slice(32).ToArray());
+                        channels.Solutions.Writer.TryWrite(new JobSolution
+                        {
+                            Nonce = job.Nonce,
+                            Solution = concat.Slice(32).ToArray()
+                        });
                     }
 
                     if (count == 0) {

@@ -117,13 +117,11 @@ namespace dcrpt_miner
             return Task.CompletedTask;
         }
 
-        public async Task<SubmitResult> SubmitAsync(byte[] solution)
+        public async Task<SubmitResult> SubmitAsync(JobSolution solution)
         {
-            Results.Clear();
-
             Logger.LogDebug("Begin submit solution");
             var pow = new Solution {
-                pow = solution.AsString()
+                pow = solution.Solution.AsString()
             };
 
             var json = JsonSerializer.Serialize(pow);
@@ -224,6 +222,11 @@ namespace dcrpt_miner
                 RetryCount++;
 
                 cancellationToken.WaitHandle.WaitOne(TimeSpan.FromSeconds(1));
+
+                if (cancellationToken.IsCancellationRequested) {
+                    return;
+                }
+
                 if (!DevFeeRunning) {
                     SafeConsole.WriteLine(ConsoleColor.DarkGray, "{0:T}: Pool connection interrupted, retrying ({1}/{2})...", DateTime.Now, RetryCount, retries);
                 }

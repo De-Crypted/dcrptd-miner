@@ -57,7 +57,7 @@ namespace dcrpt_miner
             }
         }
 
-        public async Task<SubmitResult> SubmitAsync(byte[] solution)
+        public async Task<SubmitResult> SubmitAsync(JobSolution solution)
         {
             var user = Configuration.GetValue<string>("user");
             

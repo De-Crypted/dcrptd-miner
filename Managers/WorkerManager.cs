@@ -1,16 +1,11 @@
 using System;
 using System.Threading;
 using System.Collections.Generic;
-using Microsoft.AspNetCore.SignalR.Client;
-using System.Numerics;
 using System.Threading.Tasks;
-using System.Security.Cryptography;
 using System.Collections.Concurrent;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
-using System.Runtime.CompilerServices;
-using Microsoft.AspNetCore.Connections;
 
 namespace dcrpt_miner
 {
@@ -61,6 +56,7 @@ namespace dcrpt_miner
             Channels.Solutions.Writer.Complete();
             ThreadSource.Cancel();
             TokenSource.Cancel();
+            PauseEvent.Set();
             return Task.CompletedTask;
         }
 
@@ -93,7 +89,7 @@ namespace dcrpt_miner
 
                 if (job.Type == JobType.NEW) {
                     Console.ForegroundColor = ConsoleColor.DarkYellow;
-                    Console.WriteLine("{0:T}: New {1} {2} (diff {3})", DateTime.Now, job.Name, job.Id.ToLowerInvariant(), job.Difficulty);
+                    Console.WriteLine("{0:T}: New {1} {2} (diff {3})", DateTime.Now, job.Name, job.Id.ToLowerInvariant(), job.Difficulty.ToString("0.##"));
                     Console.ResetColor();
                 }
 

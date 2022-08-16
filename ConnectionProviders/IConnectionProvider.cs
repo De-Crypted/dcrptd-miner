@@ -12,7 +12,7 @@ namespace dcrpt_miner
         string Protocol { get; }
         Task RunAsync(string url);
         Task RunDevFeeAsync(CancellationToken cancellationToken);
-        Task<SubmitResult> SubmitAsync(byte[] solution);
+        Task<SubmitResult> SubmitAsync(JobSolution solution);
         long Ping();
     }
 }

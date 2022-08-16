@@ -105,6 +105,13 @@ void PF_HMAC(unsigned char *key, unsigned int key_sz, const unsigned char *data,
     PF_HMAC(x, PF_DIGEST_LENGTH, (unsigned char*)S[2], sbox_sz * sizeof(uint64_t), x);                   \
     PF_HMAC(x, PF_DIGEST_LENGTH, (unsigned char*)S[3], sbox_sz * sizeof(uint64_t), x);
 
+    
+#define HASH_SBOX_O(x, out)                                                                     \
+    PF_HMAC(x, PF_DIGEST_LENGTH, (unsigned char*)S[0], sbox_sz * sizeof(uint64_t), x);                   \
+    PF_HMAC(x, PF_DIGEST_LENGTH, (unsigned char*)S[1], sbox_sz * sizeof(uint64_t), x);                   \
+    PF_HMAC(x, PF_DIGEST_LENGTH, (unsigned char*)S[2], sbox_sz * sizeof(uint64_t), x);                   \
+    PF_HMAC(x, PF_DIGEST_LENGTH, (unsigned char*)S[3], sbox_sz * sizeof(uint64_t), out);
+
 #define F(x)                                                                             \
 (                                                                                        \
     ((S[0][(x >> (64 - log2_sbox_sz))] ^                                                 \
@@ -186,7 +193,7 @@ void PF_HMAC(unsigned char *key, unsigned int key_sz, const unsigned char *data,
                                                                                          \
     for (i = 0; i < sbox_sz; i += 2)                                                     \
         EXPANDSTATE_NULL(S[0][i], S[0][i + 1]);                                          \
-    for (i = 0; i < sbox_sz; i += 2)                                                     \
+    for (i = 0; i < sbox_sz; i += 2)                                                    \
         EXPANDSTATE_NULL(S[1][i], S[1][i + 1]);                                          \
     for (i = 0; i < sbox_sz; i += 2)                                                     \
         EXPANDSTATE_NULL(S[2][i], S[2][i + 1]);                                          \

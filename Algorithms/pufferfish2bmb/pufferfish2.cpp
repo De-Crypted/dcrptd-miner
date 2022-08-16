@@ -169,8 +169,9 @@ void pf_hashpass(const void *key_r, const size_t key_sz, uint8_t *out)
     }
     while (--count);
 
-    HASH_SBOX(key);
-    memcpy(out, key, PF_DIGEST_LENGTH);
+    //HASH_SBOX(key);
+    //memcpy(out, key, PF_DIGEST_LENGTH);
+    HASH_SBOX_O(key, out);
 
     for (i = 0; i < PF_SBOX_N; i++)
         free(S[i]);

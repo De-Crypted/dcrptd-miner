@@ -125,7 +125,7 @@ namespace dcrpt_miner
             try {
                 await foreach(var solution in Channels.Solutions.Reader.ReadAllAsync(cancellationToken)) {
                     try {
-                        Logger.LogDebug("Submitting solution (nonce = {})", solution.AsString());
+                        Logger.LogDebug("Submitting solution (nonce = {})", solution.Nonce.AsString());
                         var shares = Interlocked.Increment(ref StatusManager.Shares);
 
                         sw.Start();
@@ -161,13 +161,13 @@ namespace dcrpt_miner
         }
 
         private IConnectionProvider GetConnectionProvider(string url) {
-            switch (url.Substring(0, url.IndexOf(':'))) {
-                case "dcrpt":
-                    return (IConnectionProvider)ServiceProvider.GetService(typeof(DcrptConnectionProvider));
-                case "shifu":
+            switch (url) {
+                case string s when s.StartsWith("shifu"):
                     return (IConnectionProvider)ServiceProvider.GetService(typeof(ShifuPoolConnectionProvider));
-                case "bamboo":
+                case string s when s.StartsWith("bamboo"):
                     return (IConnectionProvider)ServiceProvider.GetService(typeof(BambooNodeConnectionProvider));
+                case string s when s.StartsWith("stratum"):
+                    return (IConnectionProvider)ServiceProvider.GetService(typeof(StratumConnectionProvider));
                 default:
                     throw new Exception("Unknown protocol");
             }

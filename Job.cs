@@ -9,9 +9,10 @@ namespace dcrpt_miner
         public string Id { get; set; }
         public string Name { get; set; }
         public byte[] Nonce { get; set; }
-        public int Difficulty { get; set; }
+        public decimal Difficulty { get; set; }
         public CancellationToken CancellationToken { get; set; }
         public Type Algorithm { get; set; }
+        public byte[] Solution { get; set; }
     }
 
     public enum JobType {
