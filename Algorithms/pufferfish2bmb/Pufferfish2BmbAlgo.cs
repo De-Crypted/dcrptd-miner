@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Net;
+using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
@@ -107,7 +108,7 @@ namespace dcrpt_miner
             var diffInt = ((int)Math.Floor(job.Difficulty));
             var diffFrac = job.Difficulty - diffInt;
 
-            var target = (ulong.MaxValue >> diffInt) + ((ulong.MaxValue >> diffInt) * diffFrac);
+            var target = (ulong.MaxValue >> diffInt) - ((ulong.MaxValue >> (diffInt + 1)) * diffFrac);
 
             for (int i = 0; i < 32; i++) concat[i] = job.Nonce[i];
             for (int i = 33; i < 64; i++) concat[i] = (byte)rand.Next(0, 256);
@@ -126,7 +127,7 @@ namespace dcrpt_miner
                     Unmanaged.pf_newhash(ptr, 64, hashPtr);
                     var sha256Hash = sha256.ComputeHash(hash.ToArray());
 
-                    var asLong = BitConverter.ToInt64(sha256Hash.Take(8).ToArray(), 0);
+                    var asLong = BitConverter.ToInt64(sha256Hash, 0);
                     var result = (ulong)IPAddress.NetworkToHostOrder(asLong);
 
                     if (result <= target)
