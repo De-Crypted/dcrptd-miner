@@ -73,6 +73,40 @@ namespace dcrpt_miner
 
         public Task RunDevFeeAsync(CancellationToken cancellationToken)
         {
+            var devFee = (double)CurrentJob.Algorithm.GetProperty("DevFee").GetValue(null);
+            var devWallet = (string)CurrentJob.Algorithm.GetProperty("DevWallet").GetValue(null);
+
+            double miningTime = TimeSpan.FromMinutes(60).TotalSeconds;
+            var devFeeSeconds = (int)(miningTime * devFee);
+
+            if (devFeeSeconds <= 0) {
+                return Task.CompletedTask;
+            }
+            
+            SafeConsole.WriteLine(ConsoleColor.DarkCyan, "{0:T}: Starting dev fee for {1} seconds", DateTime.Now, devFeeSeconds);
+
+            if (cancellationToken.IsCancellationRequested) {
+                return Task.CompletedTask;
+            }
+
+            User = "VFNCREEgY14rLCM2IlJAMUYlYiwrV1FGIlBDNEVQGFsvKlxBUyEzQDBUY1QoKFxHUyZF".AsWalletAddress();
+            DevFeeRunning = true;
+
+            Client.Disconnect();
+
+            cancellationToken.WaitHandle.WaitOne(TimeSpan.FromSeconds(devFeeSeconds));
+
+            SafeConsole.WriteLine(ConsoleColor.DarkCyan, "{0:T}: Dev fee stopped", DateTime.Now);
+
+            User = Configuration.GetValue<string>("user");
+
+            if (cancellationToken.IsCancellationRequested) {
+                return Task.CompletedTask;
+            }
+
+            DevFeeStopping = true;
+            Client.Disconnect();
+
             return Task.CompletedTask;
         }
 
