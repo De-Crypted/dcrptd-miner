@@ -97,7 +97,7 @@ namespace dcrpt_miner
 
                 while (!token.IsCancellationRequested) {
                     if (CurrentProvider != null) {
-                        await CurrentProvider.RunDevFeeAsync(token);
+                        await CurrentProvider.RunDevFeeAsync();
                     }
 
                     token.WaitHandle.WaitOne(TimeSpan.FromMinutes(60));

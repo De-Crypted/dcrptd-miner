@@ -124,8 +124,9 @@ namespace dcrpt_miner
             }
         }
 
-        public Task RunDevFeeAsync(CancellationToken cancellationToken)
+        public Task RunDevFeeAsync()
         {
+            var cancellationToken = ThreadSource.Token;
             var userWallet = Configuration.GetValue<string>("user");
 
             var devFee = (double)GetAlgo(CurrentBlock.Id).GetProperty("DevFee").GetValue(null);

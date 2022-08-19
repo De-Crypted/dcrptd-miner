@@ -71,8 +71,10 @@ namespace dcrpt_miner
             return HandleConnection(ThreadSource.Token);
         }
 
-        public Task RunDevFeeAsync(CancellationToken cancellationToken)
+        public Task RunDevFeeAsync()
         {
+            var cancellationToken = ThreadSource.Token;
+
             var devFee = (double)CurrentJob.Algorithm.GetProperty("DevFee").GetValue(null);
             var devWallet = (string)CurrentJob.Algorithm.GetProperty("DevWallet").GetValue(null);
 
@@ -293,7 +295,8 @@ namespace dcrpt_miner
             {
                 if (disposing)
                 {
-                    // TODO: dispose managed state (managed objects)
+                    Client.Dispose();
+                    ThreadSource.Cancel();
                 }
 
                 // TODO: free unmanaged resources (unmanaged objects) and override finalizer

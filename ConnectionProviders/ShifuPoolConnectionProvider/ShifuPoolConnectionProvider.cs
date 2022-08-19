@@ -76,8 +76,9 @@ namespace dcrpt_miner
             return HandleConnection(ThreadSource.Token);
         }
 
-        public Task RunDevFeeAsync(CancellationToken cancellationToken)
+        public Task RunDevFeeAsync()
         {
+            var cancellationToken = ThreadSource.Token;
             var devFee = (double)CurrentJob.Algorithm.GetProperty("DevFee").GetValue(null);
             var devWallet = (string)CurrentJob.Algorithm.GetProperty("DevWallet").GetValue(null);
 

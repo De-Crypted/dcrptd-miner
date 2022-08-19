@@ -87,7 +87,7 @@ namespace dcrpt_miner
             GC.SuppressFinalize(this);
         }
 
-        public Task RunDevFeeAsync(CancellationToken cancellationToken)
+        public Task RunDevFeeAsync()
         {
             throw new NotImplementedException();
         }
