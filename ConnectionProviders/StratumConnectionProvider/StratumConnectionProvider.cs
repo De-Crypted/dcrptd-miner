@@ -238,6 +238,9 @@ namespace dcrpt_miner
             var jsonArr = jsonRaw.Split('\n').Where(str => !String.IsNullOrEmpty(str));
 
             foreach (var json in jsonArr) {
+                if (string.IsNullOrEmpty(json)) {
+                    continue;
+                };
                 
                 if (json.Contains("\"method\"")) {
                     var command = JsonSerializer.Deserialize<StratumCommand>(json);
