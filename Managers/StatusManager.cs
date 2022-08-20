@@ -67,7 +67,8 @@ namespace dcrpt_miner
             {
                 hashes = hashes,
                 uptime = Convert.ToInt64(Watch.Elapsed.TotalSeconds),
-                ver = "2.1.0", // TODO: Set Assembly version upon release
+                ver = "2.2.1", // TODO: Set Assembly version upon release
+                accepted = AcceptedShares,
                 rejected = RejectedShares
             };
         }
