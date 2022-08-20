@@ -13,6 +13,7 @@ Multi-platform cyptocurrency miner written mostly in C#.
 |:---------|:------------------|:-|
 | Bamboo Node | bamboo:// | Bamboo solo mining
 | Shifupool | shifu:// | Shifupool http://185.215.180.7:4001/ |
+| Stratum | stratum+tcp:// |  |
 
 Stratum will be implemented when required
 
