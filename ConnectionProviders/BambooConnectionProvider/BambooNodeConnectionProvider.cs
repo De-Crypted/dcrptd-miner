@@ -375,12 +375,14 @@ namespace dcrpt_miner
 
         public long Ping()
         {
-            /*using(var ping = new Ping()) {
+            try {
+                using var ping = new Ping();
                 var uri = new Uri(Url);
                 var reply = ping.Send(uri.DnsSafeHost);
                 return reply.RoundtripTime;
-            }*/
-            return 0;
+            } catch (Exception) {
+                return 0;
+            }
         }
     }
 }
