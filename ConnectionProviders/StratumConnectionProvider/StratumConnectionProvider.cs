@@ -56,11 +56,12 @@ namespace dcrpt_miner
 
         public long Ping()
         {
-            using(var ping = new Ping()) {
+            /*using(var ping = new Ping()) {
                 var uri = new Uri(Url);
                 var reply = ping.Send(uri.DnsSafeHost);
                 return reply.RoundtripTime;
-            }
+            }*/
+            return 0;
         }
 
         public Task RunAsync(string url)
