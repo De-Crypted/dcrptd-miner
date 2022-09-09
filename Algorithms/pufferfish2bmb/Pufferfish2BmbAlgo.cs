@@ -23,7 +23,7 @@ namespace dcrpt_miner
     {
         public static bool GPU => false;
         public static bool CPU => true;
-        public static double DevFee => 0.015d;
+        public static double DevFee => 0.01d;
         public static string DevWallet => "VFNCREEgY14rLCM2IlJAMUYlYiwrV1FGIlBDNEVQGFsvKlxBUyEzQDBUY1QoKFxHUyZF".AsWalletAddress();
         public string Name => "pufferfish2bmb";
 
