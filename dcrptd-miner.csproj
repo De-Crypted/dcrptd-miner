@@ -12,7 +12,7 @@
     <Optimize>true</Optimize>
     <PublishReadyToRun>true</PublishReadyToRun>
     <PublishSingleFile>true</PublishSingleFile>
-    <Version>2.2.1</Version>
+    <Version>2.3.1</Version>
   </PropertyGroup>
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
@@ -48,7 +48,7 @@
     <Content Include="Algorithms/pufferfish2bmb/pufferfish2.so">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
-        <Content Include="Algorithms/pufferfish2bmb/pufferfish2">
+      <Content Include="Algorithms/pufferfish2bmb/pufferfish2">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
   </ItemGroup>

@@ -79,8 +79,8 @@ namespace dcrpt_miner
 
             var version = Assembly.GetEntryAssembly().GetCustomAttribute<AssemblyInformationalVersionAttribute>().InformationalVersion;
             Console.WriteLine("dcrptd miner v" + version.ToString());
-
             Console.Title = "dcrptd miner " + version.ToString();
+
             var proc = await host.StartAsync();
 
             Console.TreatControlCAsInput = true;

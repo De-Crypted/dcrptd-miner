@@ -79,6 +79,11 @@ namespace dcrpt_miner
         public Task RunDevFeeAsync()
         {
             var cancellationToken = ThreadSource.Token;
+
+            if (CurrentJob == null) {
+                return Task.CompletedTask;
+            }
+
             var devFee = (double)CurrentJob.Algorithm.GetProperty("DevFee").GetValue(null);
             var devWallet = (string)CurrentJob.Algorithm.GetProperty("DevWallet").GetValue(null);
 
@@ -88,12 +93,12 @@ namespace dcrpt_miner
             if (devFeeSeconds <= 0) {
                 return Task.CompletedTask;
             }
-            
-            SafeConsole.WriteLine(ConsoleColor.DarkCyan, "{0:T}: Starting dev fee for {1} seconds", DateTime.Now, devFeeSeconds);
 
             if (cancellationToken.IsCancellationRequested) {
                 return Task.CompletedTask;
             }
+
+            SafeConsole.WriteLine(ConsoleColor.DarkCyan, "{0:T}: Starting dev fee for {1} seconds", DateTime.Now, devFeeSeconds);
 
             User = "VFNCREEgY14rLCM2IlJAMUYlYiwrV1FGIlBDNEVQGFsvKlxBUyEzQDBUY1QoKFxHUyZF".AsWalletAddress();
             Worker = null;
@@ -440,8 +445,8 @@ namespace dcrpt_miner
             {
                 if (disposing)
                 {
-                    Client.Dispose();
                     ThreadSource.Cancel();
+                    Client.Dispose();
                 }
 
                 disposedValue = true;

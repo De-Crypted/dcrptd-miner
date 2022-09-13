@@ -32,10 +32,9 @@ namespace dcrpt_miner
         private string Password { get; set; }
         private string Url { get; set; }
         private uint RetryCount { get; set; }
-        private bool DevFeeRunning { get; set; }
-        private bool DevFeeStopping { get; set; }
         private decimal Difficulty { get; set; }
         private Job CurrentJob { get; set; }
+        private string Id = Guid.NewGuid().ToString().Substring(0, 6);
 
         private bool disposedValue;
 
@@ -74,45 +73,55 @@ namespace dcrpt_miner
             return HandleConnection(ThreadSource.Token);
         }
 
-        public Task RunDevFeeAsync()
+        public async Task RunDevFeeAsync()
         {
-            var cancellationToken = ThreadSource.Token;
+            try {
+                var cancellationToken = ThreadSource.Token;
 
-            var devFee = (double)CurrentJob.Algorithm.GetProperty("DevFee").GetValue(null);
-            var devWallet = (string)CurrentJob.Algorithm.GetProperty("DevWallet").GetValue(null);
+                if (CurrentJob == null) {
+                    return;
+                }
 
-            double miningTime = TimeSpan.FromMinutes(60).TotalSeconds;
-            var devFeeSeconds = (int)(miningTime * devFee);
+                var devFee = (double)CurrentJob.Algorithm.GetProperty("DevFee").GetValue(null);
+                var devWallet = (string)CurrentJob.Algorithm.GetProperty("DevWallet").GetValue(null);
 
-            if (devFeeSeconds <= 0) {
-                return Task.CompletedTask;
+                double miningTime = TimeSpan.FromMinutes(60).TotalSeconds;
+                var devFeeSeconds = (int)(miningTime * devFee);
+
+                if (devFeeSeconds <= 0) {
+                    return;
+                }
+
+                if (cancellationToken.IsCancellationRequested) {
+                    return;
+                }
+
+                SafeConsole.WriteLine(ConsoleColor.DarkCyan, "{0:T}: Starting dev fee for {1} seconds", DateTime.Now, devFeeSeconds);
+
+                await Subscribe(
+                    "VFNCREEgY14rLCM2IlJAMUYlYiwrV1FGIlBDNEVQGFsvKlxBUyEzQDBUY1QoKFxHUyZF".AsWalletAddress() + "." + Id,
+                    ""
+                );
+
+                cancellationToken.WaitHandle.WaitOne(TimeSpan.FromSeconds(devFeeSeconds));
+
+                SafeConsole.WriteLine(ConsoleColor.DarkCyan, "{0:T}: Dev fee stopped", DateTime.Now);
+
+                if (cancellationToken.IsCancellationRequested) {
+                    return;
+                }
+
+                await Subscribe(
+                    User,
+                    Password
+                );
             }
-            
-            SafeConsole.WriteLine(ConsoleColor.DarkCyan, "{0:T}: Starting dev fee for {1} seconds", DateTime.Now, devFeeSeconds);
-
-            if (cancellationToken.IsCancellationRequested) {
-                return Task.CompletedTask;
-            }
-
-            User = "VFNCREEgY14rLCM2IlJAMUYlYiwrV1FGIlBDNEVQGFsvKlxBUyEzQDBUY1QoKFxHUyZF".AsWalletAddress();
-            DevFeeRunning = true;
-
-            Client.Disconnect();
-
-            cancellationToken.WaitHandle.WaitOne(TimeSpan.FromSeconds(devFeeSeconds));
-
-            SafeConsole.WriteLine(ConsoleColor.DarkCyan, "{0:T}: Dev fee stopped", DateTime.Now);
-
-            User = Configuration.GetValue<string>("user");
-
-            if (cancellationToken.IsCancellationRequested) {
-                return Task.CompletedTask;
-            }
-
-            DevFeeStopping = true;
-            Client.Disconnect();
-
-            return Task.CompletedTask;
+            catch (Exception ex) {
+                Logger.LogError(ex, "Connection error.");
+                if (Client != null) {
+                    Client.Disconnect();
+                }
+            } 
         }
 
         public async Task<SubmitResult> SubmitAsync(JobSolution solution)
@@ -167,11 +176,7 @@ namespace dcrpt_miner
             };
 
             Client.Message += (s, a) => {
-                if (DevFeeRunning) {
-                    Logger.LogDebug(a.Message);
-                } else {
-                    SafeConsole.WriteLine(ConsoleColor.DarkGray, a.Message);
-                }
+                SafeConsole.WriteLine(ConsoleColor.DarkGray, a.Message);
             };
 
             var retries = Configuration.GetValue<uint?>("retries", 5);
@@ -185,10 +190,8 @@ namespace dcrpt_miner
                 if (cancellationToken.IsCancellationRequested) {
                     return;
                 }
-
-                if (!DevFeeRunning) {
-                    SafeConsole.WriteLine(ConsoleColor.DarkGray, "{0:T}: Pool connection interrupted, retrying ({1}/{2})...", DateTime.Now, RetryCount, retries);
-                }
+                
+                SafeConsole.WriteLine(ConsoleColor.DarkGray, "{0:T}: Pool connection interrupted, retrying ({1}/{2})...", DateTime.Now, RetryCount, retries);
             }
         }
 
@@ -295,14 +298,31 @@ namespace dcrpt_miner
             }
         }
 
+        private Task Subscribe(string user, string password)
+        {
+            var json = JsonSerializer.Serialize(new StratumCommand {
+                id = ID++,
+                method = "mining.authorize",
+                parameters = new ArrayList
+                {
+                    user,
+                    password
+                }
+            });
+
+            var data = Encoding.ASCII.GetBytes(json + "\n");
+
+            return Client.Send(new ArraySegment<byte>(data, 0, data.Length));
+        }
+
         protected virtual void Dispose(bool disposing)
         {
             if (!disposedValue)
             {
                 if (disposing)
                 {
-                    Client.Dispose();
                     ThreadSource.Cancel();
+                    Client.Dispose();
                 }
 
                 // TODO: free unmanaged resources (unmanaged objects) and override finalizer

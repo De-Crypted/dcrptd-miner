@@ -8,6 +8,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using System.Text;
 using LibreHardwareMonitor.Hardware;
+using System.Reflection;
 
 namespace dcrpt_miner
 {
@@ -67,7 +68,7 @@ namespace dcrpt_miner
             {
                 hashes = hashes,
                 uptime = Convert.ToInt64(Watch.Elapsed.TotalSeconds),
-                ver = "2.2.1", // TODO: Set Assembly version upon release
+                ver = Assembly.GetEntryAssembly().GetCustomAttribute<AssemblyInformationalVersionAttribute>().InformationalVersion.ToString(),
                 accepted = AcceptedShares,
                 rejected = RejectedShares
             };
