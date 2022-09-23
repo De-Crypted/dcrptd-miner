@@ -59,7 +59,7 @@ namespace dcrpt_miner
 
                 var tid = i;
                 logger.LogDebug("Starting CpuWorker[{}] thread", tid);
-                new Thread(() => {
+                var t = new Thread(() => {
                     Thread.BeginThreadAffinity();
                     var token = ThreadSource.Token;
                     while (!token.IsCancellationRequested) {
@@ -70,7 +70,11 @@ namespace dcrpt_miner
                             logger.LogDebug("Operation cancelled", ex);
                         }
                     }
-                }).UnsafeStart();
+                });
+
+                t.Priority = ThreadPriority.Normal;
+                
+                t.UnsafeStart();
 
                 Workers.Add(queue); 
             }
@@ -145,7 +149,7 @@ namespace dcrpt_miner
                         count = 10;
                         if (id < 2) {
                             // Be nice to other threads and processes
-                            Thread.Sleep(1);
+                            //Thread.Sleep(1);
                         }
 
                         pauseEvent.WaitOne();
@@ -246,7 +250,7 @@ namespace dcrpt_miner
             Console.ForegroundColor = ConsoleColor.DarkYellow;
             Console.WriteLine("Running Benchmark");
             Console.WriteLine("If power usage is not recorded, run as administrator!");
-            Console.WriteLine("Threads\t\tHashrate\tper thread\tper watt\tPower Usage\tper thread");
+            Console.WriteLine("Threads\t\tHashrate\tper thread\tper watt\tPower Usage\tper thread\tper hash");
 
             var tsw = new Stopwatch();
             tsw.Start();
@@ -290,12 +294,13 @@ namespace dcrpt_miner
                 StatusManager.CalculateUnit(hashes / (i + 1), out var thashrate, out var tunit);
 
                 var avgPowerUsage = powerUsage.Count > 0 ? powerUsage.Average() : 0;
-                Console.WriteLine("\t\t{0:N2} {1}\t{2:N2} {3}\t{4:N2} h/w\t{5:N2}w\t\t{6:N2}w", 
+                Console.WriteLine("\t\t{0:N2} {1}\t{2:N2} {3}\t{4:N2} h/w\t{5:N2}w\t\t{6:N2}w\t\t{7:N2} w/h", 
                     hashrate, unit, 
                     thashrate, tunit,
                     avgPowerUsage > 0 ? hashes / avgPowerUsage : 0,
                     avgPowerUsage, 
-                    avgPowerUsage / (i + 1));
+                    avgPowerUsage / (i + 1),
+                    hashes > 0 ? avgPowerUsage / hashes : 0);
             }
     
             tsw.Stop();

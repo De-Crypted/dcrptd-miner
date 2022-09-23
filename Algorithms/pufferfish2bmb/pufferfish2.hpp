@@ -29,9 +29,9 @@
 #include <stdint.h>
 #include <string.h>
 #include <errno.h>
+#include <cstdlib>
 
-#include "openssl/sha.h"
-#include "openssl/evp.h"
+#include "sha512.hpp"
 
 #define PF_ID "$PF2$"
 #define PF_ID_SZ strlen(PF_ID)
@@ -40,7 +40,6 @@
 #define PF_SALTSPACE (2 + PF_ID_SZ + bin2enc_len(sizeof(pf_salt)))
 #define PF_HASHSPACE (PF_SALTSPACE + bin2enc_len(PF_DIGEST_LENGTH))
 
-#define PF_DIGEST EVP_sha512()
 #define PF_DIGEST_LENGTH SHA512_DIGEST_LENGTH
 
 typedef struct pf_salt

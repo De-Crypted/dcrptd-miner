@@ -12,6 +12,7 @@ using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Http.Features;
 using System.Threading;
 using System.Reflection;
+using dcrpt_miner.NosoHash;
 
 namespace dcrpt_miner
 {
@@ -35,6 +36,9 @@ namespace dcrpt_miner
                     break;
                     case "pufferfish2bmb":
                         tAlgo = typeof(Pufferfish2BmbAlgo);
+                    break;
+                    case "nosohash":
+                        tAlgo = typeof(NosoHashAlgo);
                     break;
                     default:
                         // print possible algorithms

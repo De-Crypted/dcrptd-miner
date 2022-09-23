@@ -51,5 +51,8 @@
       <Content Include="Algorithms/pufferfish2bmb/pufferfish2">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
+    <Content Include="Algorithms/nosohash/nosohash.cl">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 </Project>

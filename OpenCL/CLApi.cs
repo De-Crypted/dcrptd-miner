@@ -204,7 +204,7 @@ namespace dcrpt_miner.OpenCL
             if (errorCode == ClErrorCode.Success) {
                 return;
             }
-            
+
             throw new Exception(String.Format("OpenCL call returned error ({0})", errorCode));
         }
     }

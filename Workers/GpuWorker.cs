@@ -110,7 +110,7 @@ namespace dcrpt_miner
             ClErrorCode error;
 
             var dir = Path.GetDirectoryName(Process.GetCurrentProcess().MainModule.FileName);
-            var path = Path.Join(dir, "Algorithms", "sha256bmb", "sha256_pow.cl");
+            var path = Path.Join(dir, "Algorithms", "nosohash", "nosohash.cl");
 
             if (!File.Exists(path)) {
                 throw new FileNotFoundException("OpenCL kernel missing: " + path);
@@ -152,7 +152,7 @@ namespace dcrpt_miner
                 throw new Exception(Marshal.PtrToStringAnsi(buildLogBuf));
             }
 
-            kernel = Cl.clCreateKernel(program, "sha256_pow_kernel", out error);
+            kernel = Cl.clCreateKernel(program, "md5d", out error);
             error.ThrowIfError();
         }
     }
