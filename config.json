@@ -1,10 +1,10 @@
 {
     "_url": "Pool or node url. You can set multiple addresses, first one will be used as default and if connection fails miner will move to next one. Address prefix determines protocol used.",
     "url": [
-        "shifu://185.215.180.7:5555"
+        "stratum+tcp://bmb.ffmpool.com:4444"
     ],
     "_user": "Username or wallet address as required by pool",
-    "user": "WALLET_ADDRESS_HERE.WorkerName",
+    "user": "00106FBFFC2FEECB28DC325AD08BCB1342BF3EC7D46F12AD31.j7pro",
     "_password": "Password",
     "password": "x",
     "_retries": "Specifies how many times miner will try to connect to a specific url until selecting next",
